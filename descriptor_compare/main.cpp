@@ -147,7 +147,7 @@ int main() {
 
     try {
         // Generate locked-in keypoints
-        //LockedInKeypoints::generateLockedInKeypoints(dataFolderPath, keypointFolderPath);
+        LockedInKeypoints::generateLockedInKeypoints(dataFolderPath, keypointFolderPath);
 
         // Display locked-in keypoints
         LockedInKeypoints::displayLockedInKeypointsBorder(dataFolderPath);

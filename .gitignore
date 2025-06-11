@@ -21,3 +21,6 @@ results/*
 !models/
 models/*
 !models/.gitkeep
+
+!build/
+build/*
