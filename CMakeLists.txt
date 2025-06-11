@@ -52,7 +52,7 @@ endif()
 message(STATUS "OpenCV found: ${OpenCV_VERSION}")
 
 # Boost
-find_package(Boost REQUIRED COMPONENTS system filesystem)
+find_package(Boost CONFIG REQUIRED COMPONENTS system filesystem)
 message(STATUS "Boost found: ${Boost_VERSION}")
 
 # TBB

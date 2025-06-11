@@ -10,7 +10,7 @@
 
 #include "DSPSIFT.h"
 using namespace cv;
-using namespace xfeatures2d;
+// using namespace xfeatures2d;
 
 //number of different scales to use. determined by factors in the range of [1/6, 4/3].
 const int NUM_SCALES = 1; //CANNOT BE SET TO <= 0 

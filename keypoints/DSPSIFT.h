@@ -6,7 +6,7 @@
 
 using namespace std;
 using namespace cv;
-using namespace xfeatures2d;
+//using namespace xfeatures2d;
 using namespace hal;
 
 #ifdef __cplusplus

@@ -14,9 +14,11 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     wget \
     curl \
-    # OpenCV dependencies
+    # OpenCV dependencies (try more complete installation)
     libopencv-dev \
     libopencv-contrib-dev \
+    opencv-data \
+    python3-opencv \
     # Boost
     libboost-all-dev \
     # Threading
@@ -29,11 +31,12 @@ RUN apt-get update && apt-get install -y \
     # Additional utilities
     htop \
     vim \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages for research
 RUN pip3 install \
-    numpy \
+    numpy<2 \
     matplotlib \
     pandas \
     seaborn \
@@ -62,13 +65,15 @@ RUN conan profile detect --force
 # Create working directory
 WORKDIR /workspace
 
+# Set environment for OpenCV
+ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig
+ENV DISPLAY=:0
+
+# Default command for development
+CMD ["bash"]
+
 # Production stage - minimal runtime
 FROM base AS production
 
 WORKDIR /workspace
-
-# Copy built application (will be mounted or copied)
-# COPY --from=build /workspace/build/descriptor_compare /usr/local/bin/
-
-# Default command for development
-CMD ["bash"]
+CMD ["./build/descriptor_compare"]

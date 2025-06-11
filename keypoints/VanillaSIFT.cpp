@@ -1,5 +1,5 @@
 #include "VanillaSIFT.h"
-using namespace cv::xfeatures2d;
+// using namespace cv::xfeatures2d;
 
 // assumed gaussian blur for input image
 const float VanillaSIFT::SIFT_INIT_SIGMA = 0.5f;

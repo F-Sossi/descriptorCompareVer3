@@ -137,7 +137,8 @@ int main() {
             }
         }
     }
-
+    std::cout << "Hostname: " << getenv("HOSTNAME") << std::endl;
+    std::cout << "PWD: " << getenv("PWD") << std::endl;
     return success ? 0 : 1;
 }
 
