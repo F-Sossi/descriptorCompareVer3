@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     wget \
     curl \
-    # OpenCV dependencies (try more complete installation)
+    # OpenCV dependencies
     libopencv-dev \
     libopencv-contrib-dev \
     opencv-data \
@@ -28,6 +28,11 @@ RUN apt-get update && apt-get install -y \
     libxext-dev \
     libxrender-dev \
     libxtst-dev \
+    # ==================== ADD SQLITE3 HERE ====================
+    # SQLite3 development package
+    libsqlite3-dev \
+    sqlite3 \
+    # ==========================================================
     # Additional utilities
     htop \
     vim \
@@ -35,8 +40,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages for research
+# Fix: Quote the numpy version constraint
 RUN pip3 install \
-    numpy<2 \
+    "numpy<2" \
     matplotlib \
     pandas \
     seaborn \

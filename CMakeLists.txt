@@ -67,6 +67,38 @@ else()
     message(WARNING "TBB not found - multithreading may be limited")
 endif()
 
+# SQLite3 - for database storage
+find_package(SQLite3 QUIET)
+if(NOT SQLite3_FOUND AND PKG_CONFIG_FOUND)
+    pkg_check_modules(SQLite3 sqlite3)
+endif()
+
+if(NOT SQLite3_FOUND)
+    # Try to find SQLite3 manually
+    find_path(SQLite3_INCLUDE_DIR sqlite3.h)
+    find_library(SQLite3_LIBRARY sqlite3)
+
+    if(SQLite3_INCLUDE_DIR AND SQLite3_LIBRARY)
+        set(SQLite3_FOUND TRUE)
+        set(SQLite3_INCLUDE_DIRS ${SQLite3_INCLUDE_DIR})
+        set(SQLite3_LIBRARIES ${SQLite3_LIBRARY})
+        message(STATUS "SQLite3 found manually")
+    else()
+        message(FATAL_ERROR "SQLite3 not found. Please install SQLite3 development package.")
+    endif()
+else()
+    message(STATUS "SQLite3 found via pkg-config or find_package")
+endif()
+
+# JSON library (for storing configs) - we'll use nlohmann/json as it's header-only
+include(FetchContent)
+FetchContent_Declare(
+        json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.2
+)
+FetchContent_MakeAvailable(json)
+
 # Optional: PyTorch (for CNN descriptors)
 if(BUILD_PYTHON_BRIDGE)
     find_package(Python3 COMPONENTS Interpreter Development QUIET)
@@ -91,6 +123,10 @@ if(OpenCV_INCLUDE_DIRS)
     include_directories(${OpenCV_INCLUDE_DIRS})
 endif()
 
+if(SQLite3_INCLUDE_DIRS)
+    include_directories(${SQLite3_INCLUDE_DIRS})
+endif()
+
 # Source files
 set(SOURCES
     descriptor_compare/main.cpp
@@ -103,6 +139,7 @@ set(SOURCES
     descriptor_compare/processor_utils.cpp
     descriptor_compare/experiment_config.cpp
     descriptor_compare/locked_in_keypoints.cpp
+        database/database_manager.cpp
 )
 
 set(HEADERS
@@ -115,6 +152,7 @@ set(HEADERS
     descriptor_compare/processor_utils.hpp
     descriptor_compare/experiment_config.hpp
     descriptor_compare/locked_in_keypoints.hpp
+    database/database_manager.hpp
 )
 
 # Main executable
@@ -160,6 +198,16 @@ else()
     endif()
 endif()
 
+# SQLite linking
+if(SQLite3_LIBRARIES)
+    target_link_libraries(descriptor_compare ${SQLite3_LIBRARIES})
+elseif(SQLite3_LDFLAGS)
+    target_link_libraries(descriptor_compare ${SQLite3_LDFLAGS})
+endif()
+
+# JSON library linking (header-only, but we need to specify it)
+target_link_libraries(descriptor_compare nlohmann_json::nlohmann_json)
+
 # PyTorch linking (if enabled)
 if(BUILD_PYTHON_BRIDGE AND Torch_FOUND)
     target_link_libraries(descriptor_compare ${TORCH_LIBRARIES})
@@ -188,16 +236,44 @@ endif()
 set(DATA_PATH "${CMAKE_CURRENT_SOURCE_DIR}/data/")
 set(RESULTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/results/")
 set(KEYPOINTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reference_keypoints/")
+set(DATABASE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/experiments.db")
 
 target_compile_definitions(descriptor_compare PRIVATE
     DATA_PATH="${DATA_PATH}"
     RESULTS_PATH="${RESULTS_PATH}"
     KEYPOINTS_PATH="${KEYPOINTS_PATH}"
+    DATABASE_PATH="${DATABASE_PATH}"
 )
 
 # Create necessary directories
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/results)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/reference_keypoints)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/database)
+
+# Test executable for database functionality
+add_executable(test_database
+        database/test_database.cpp
+        database/database_manager.cpp
+)
+
+# Link the same libraries to test executable
+target_link_libraries(test_database
+        ${SQLite3_LIBRARIES}
+        nlohmann_json::nlohmann_json
+)
+
+# OpenCV for test executable
+if(OpenCV_LIBRARIES)
+    target_link_libraries(test_database ${OpenCV_LIBRARIES})
+endif()
+
+# Include directories for test executable
+if(SQLite3_INCLUDE_DIRS)
+    target_include_directories(test_database PRIVATE ${SQLite3_INCLUDE_DIRS})
+endif()
+if(OpenCV_INCLUDE_DIRS)
+    target_include_directories(test_database PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
 
 # Installation
 install(TARGETS descriptor_compare
@@ -214,6 +290,12 @@ if(TBB_FOUND)
 else()
     message(STATUS "TBB: Not found")
 endif()
+if(SQLite3_FOUND)
+    message(STATUS "SQLite3: Found")
+else()
+    message(STATUS "SQLite3: Not found")
+endif()
+message(STATUS "JSON Library: nlohmann/json (fetched)")
 if(BUILD_PYTHON_BRIDGE)
     message(STATUS "Python bridge: Enabled")
     if(Torch_FOUND)

@@ -372,3 +372,168 @@ std::vector<cv::KeyPoint> LockedInKeypoints::readKeypointsFromCSV(const std::str
     file.close();
     return keypoints;
 }
+
+void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolderPath) {
+    if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
+        throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
+    }
+
+    // Create output directory for saved images
+    std::string outputPath = "keypoint_visualizations/";
+    fs::create_directories(outputPath);
+    std::cout << "\nSaving keypoint visualizations to: " << fs::absolute(outputPath).string() << std::endl;
+
+    for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
+        const fs::path subfolderPath = entry.path();
+        if (fs::is_directory(subfolderPath)) {
+            const std::string subfolderName = subfolderPath.filename().generic_string();
+            const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
+
+            // Skip if no keypoints exist for this folder
+            if (!fs::exists(referenceKeypointsFolder)) {
+                std::cerr << "No keypoints found for: " << subfolderName << std::endl;
+                continue;
+            }
+
+            // Create subfolder for this image set
+            std::string setOutputPath = outputPath + subfolderName + "/";
+            fs::create_directories(setOutputPath);
+            std::cout << "\nProcessing: " << subfolderName << std::endl;
+
+            // Create a vector to store the image filenames
+            std::vector<std::string> imageFilenames;
+            for (int i = 1; i <= 6; i++) {
+                fs::path imageFilename = subfolderPath / (std::to_string(i) + ".ppm");
+                imageFilenames.push_back(imageFilename.generic_string());
+            }
+
+            // Process each image and save with keypoints
+            for (size_t i = 0; i < imageFilenames.size(); i++) {
+                const std::string& imageFilename = imageFilenames[i];
+                cv::Mat image = cv::imread(imageFilename, cv::IMREAD_COLOR);
+
+                if (image.empty()) {
+                    std::cerr << "Failed to read image: " << imageFilename << std::endl;
+                    continue;
+                }
+
+                fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
+
+                // Check if keypoints file exists
+                if (!fs::exists(keypointsFilename)) {
+                    std::cerr << "Keypoints file not found: " << keypointsFilename << std::endl;
+                    continue;
+                }
+
+                std::vector<cv::KeyPoint> keypoints = readKeypointsFromCSV(keypointsFilename.generic_string());
+
+                cv::Mat imageWithKeypointsDisplay = image.clone();
+
+                // Draw keypoints
+                cv::drawKeypoints(image, keypoints, imageWithKeypointsDisplay,
+                                cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+                // Draw a 65x65 pixel square centered on each keypoint
+                for (const auto& keypoint : keypoints) {
+                    cv::Point2f pt = keypoint.pt;
+                    cv::rectangle(imageWithKeypointsDisplay,
+                                cv::Point(pt.x - 32.5, pt.y - 32.5),
+                                cv::Point(pt.x + 32.5, pt.y + 32.5),
+                                cv::Scalar(0, 255, 0), 2);
+                }
+
+                // Add text with keypoint count and image info
+                std::string text1 = "Image " + std::to_string(i + 1) + " - Keypoints: " + std::to_string(keypoints.size());
+                std::string text2 = subfolderName;
+                cv::putText(imageWithKeypointsDisplay, text1, cv::Point(10, 30),
+                           cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+                cv::putText(imageWithKeypointsDisplay, text2, cv::Point(10, 65),
+                           cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
+
+                // Save the image
+                std::string outputFilename = setOutputPath + "image_" + std::to_string(i + 1) + "_keypoints.jpg";
+                cv::imwrite(outputFilename, imageWithKeypointsDisplay);
+                std::cout << "  Saved: image_" << std::to_string(i + 1) << "_keypoints.jpg ("
+                         << keypoints.size() << " keypoints)" << std::endl;
+            }
+
+            // Create a summary image showing all 6 images in a grid
+            createSummaryImage(imageFilenames, referenceKeypointsFolder, setOutputPath, subfolderName);
+        }
+    }
+
+    std::cout << "\n=== All visualizations saved ===" << std::endl;
+    std::cout << "Location: " << fs::absolute(outputPath).string() << std::endl;
+    std::cout << "You can view them on your host system." << std::endl;
+}
+
+// Add this helper function for creating the summary image
+void LockedInKeypoints::createSummaryImage(const std::vector<std::string>& imageFilenames,
+                                           const fs::path& referenceKeypointsFolder,
+                                           const std::string& outputPath,
+                                           const std::string& sceneName) {
+    // Create a 2x3 grid for 6 images
+    int gridCols = 3;
+    int gridRows = 2;
+    int thumbWidth = 400;
+    int thumbHeight = 300;
+    int borderSize = 5;
+
+    // Create white background with borders
+    cv::Mat summary((thumbHeight + borderSize) * gridRows + borderSize,
+                    (thumbWidth + borderSize) * gridCols + borderSize,
+                    CV_8UC3, cv::Scalar(255, 255, 255));
+
+    for (size_t i = 0; i < imageFilenames.size() && i < 6; i++) {
+        cv::Mat image = cv::imread(imageFilenames[i], cv::IMREAD_COLOR);
+        if (image.empty()) continue;
+
+        // Load keypoints
+        fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
+        if (!fs::exists(keypointsFilename)) continue;
+
+        std::vector<cv::KeyPoint> keypoints = readKeypointsFromCSV(keypointsFilename.generic_string());
+
+        // Draw keypoints on image
+        cv::Mat imageWithKeypoints;
+        cv::drawKeypoints(image, keypoints, imageWithKeypoints,
+                         cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+        // Draw 65x65 squares on a few sample keypoints (first 5)
+        for (size_t k = 0; k < keypoints.size() && k < 5; k++) {
+            cv::Point2f pt = keypoints[k].pt;
+            cv::rectangle(imageWithKeypoints,
+                         cv::Point(pt.x - 32.5, pt.y - 32.5),
+                         cv::Point(pt.x + 32.5, pt.y + 32.5),
+                         cv::Scalar(0, 255, 0), 2);
+        }
+
+        // Resize to thumbnail
+        cv::Mat thumbnail;
+        cv::resize(imageWithKeypoints, thumbnail, cv::Size(thumbWidth, thumbHeight));
+
+        // Add image number and keypoint count
+        std::string text = "Image " + std::to_string(i + 1) + " (" + std::to_string(keypoints.size()) + " kpts)";
+        cv::putText(thumbnail, text, cv::Point(10, 25),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+
+        // Calculate position in grid with borders
+        int row = i / gridCols;
+        int col = i % gridCols;
+        int x = col * (thumbWidth + borderSize) + borderSize;
+        int y = row * (thumbHeight + borderSize) + borderSize;
+
+        // Copy to summary image
+        cv::Rect roi(x, y, thumbWidth, thumbHeight);
+        thumbnail.copyTo(summary(roi));
+    }
+
+    // Add title to the summary
+    cv::putText(summary, "Scene: " + sceneName, cv::Point(20, 30),
+               cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 0), 2);
+
+    // Save summary
+    std::string summaryFilename = outputPath + "summary_all_images.jpg";
+    cv::imwrite(summaryFilename, summary);
+    std::cout << "  Saved: summary_all_images.jpg" << std::endl;
+}
