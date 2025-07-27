@@ -1,0 +1,45 @@
+# Sample experiment configuration
+# This will be used in Stage 4 when we implement YAML support
+
+experiment:
+  name: "sample_sift_experiment"
+  description: "Basic SIFT descriptor evaluation"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "data/hpatches/"
+  scenes: []  # Empty = use all scenes
+
+keypoints:
+  generator: "sift"
+  params:
+    max_features: 2000
+    contrast_threshold: 0.04
+    edge_threshold: 10
+
+descriptors:
+  - name: "sift_baseline"
+    type: "sift"
+    params:
+      pooling: "none"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+
+output:
+  save_keypoints: true
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: true
+
+database:
+  enabled: false
