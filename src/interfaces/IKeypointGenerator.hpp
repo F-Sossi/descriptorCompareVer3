@@ -1,7 +1,7 @@
 #pragma once
 
 #include "thesis_project/types.hpp"
-#include <opencv2/opencv.hpp>
+#include <opencv4/opencv2/opencv.hpp>
 #include <vector>
 #include <memory>
 
