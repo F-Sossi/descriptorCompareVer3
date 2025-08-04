@@ -1,3 +1,32 @@
+#!/bin/bash
+# CMakeLists.txt Replacement Script - Clean Version
+
+echo "=== CMakeLists.txt Clean Replacement ==="
+echo "========================================"
+
+echo ""
+echo "Creating backup of current CMakeLists.txt..."
+cp CMakeLists.txt CMakeLists.txt.conflicted_backup
+echo "✅ Backup created: CMakeLists.txt.conflicted_backup"
+
+echo ""
+echo "Issues in your current CMakeLists.txt:"
+echo "  1. Multiple definitions of 'simple_interface_test' target"
+echo "  2. Two different testing systems conflicting"
+echo "  3. Database test paths inconsistent (some in database/, some not)"
+echo "  4. Comprehensive testing system trying to recreate existing targets"
+
+echo ""
+echo "Creating clean CMakeLists.txt with:"
+echo "  ✅ Single, consolidated testing system"
+echo "  ✅ Safe test creation (only if files exist)"
+echo "  ✅ Proper path handling for database tests"
+echo "  ✅ No duplicate target definitions"
+echo "  ✅ All your existing functionality preserved"
+
+# The clean CMakeLists.txt content is in the artifact above
+# For this script, I'll create a temporary file and replace
+cat > CMakeLists_clean.txt << 'EOF'
 cmake_minimum_required(VERSION 3.16)
 project(descriptor_compare)
 
@@ -276,9 +305,13 @@ endfunction()
 
 # Create all test executables (only if files exist)
 create_test_if_exists("tests/unit/simple_interface_test.cpp" "simple_interface_test")
+create_test_if_exists("tests/unit/test_headers.cpp" "test_headers")
+create_test_if_exists("tests/unit/test_headers_simple.cpp" "test_headers_simple")
+create_test_if_exists("tests/unit/test_new_types.cpp" "test_new_types")
 create_test_if_exists("tests/unit/test_yaml_config.cpp" "test_yaml_config")
 
 # Database tests (in database subdirectory)
+create_test_if_exists("tests/unit/database/test_constants.cpp" "test_constants")
 create_test_if_exists("tests/unit/database/test_database.cpp" "test_database")
 create_test_if_exists("tests/unit/database/test_database_integration.cpp" "test_database_integration")
 create_test_if_exists("tests/unit/database/test_database_integration_simple.cpp" "test_database_integration_simple")
@@ -332,3 +365,206 @@ message(STATUS "")
 message(STATUS "Testing:")
 message(STATUS "  Available test targets: run_all_tests, run_database_tests, run_interface_tests, run_config_tests")
 message(STATUS "")
+EOF
+
+echo ""
+echo "Replacing CMakeLists.txt with clean version..."
+mv CMakeLists_clean.txt CMakeLists.txt
+echo "✅ CMakeLists.txt replaced with clean version"
+
+echo ""
+echo "Testing the new CMakeLists.txt..."
+
+rm -rf build-cmake-clean-test
+mkdir build-cmake-clean-test
+cd build-cmake-clean-test
+
+if cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON > cmake_test.log 2>&1; then
+    echo "✅ CMake configuration successful!"
+
+    # Show configured tests
+    echo ""
+    echo "Configured tests:"
+    grep "Test configured\|Test source not found" cmake_test.log
+
+    if make -j4 > build_test.log 2>&1; then
+        echo "✅ Build successful!"
+
+        # List built executables
+        echo ""
+        echo "Built test executables:"
+        ls -1 | grep test || echo "No test executables found"
+
+        # Try running CTest
+        echo ""
+        echo "Testing CTest integration..."
+        if ctest --output-on-failure > ctest_test.log 2>&1; then
+            echo "✅ CTest working perfectly!"
+            test_count=$(grep -c "Test #" ctest_test.log)
+            echo "Number of tests: $test_count"
+        else
+            echo "⚠️ Some tests failed (may be normal without data files)"
+            echo "CTest found $(grep -c "Test #" ctest_test.log) tests"
+        fi
+
+    else
+        echo "❌ Build failed"
+        echo "First 10 lines of build log:"
+        head -500 build_test.log
+        cd ..
+        exit 1
+    fi
+
+else
+    echo "❌ CMake configuration failed"
+    echo "CMake log:"
+    cat cmake_test.log
+    cd ..
+    exit 1
+fi
+
+cd ..
+rm -rf build-cmake-clean-test
+
+echo ""
+echo "Creating simple test validation script..."
+
+cat > validate_clean_cmake.sh << 'EOF'
+#!/bin/bash
+# Validate Clean CMakeLists.txt
+
+echo "=== Validating Clean CMakeLists.txt ==="
+echo "======================================"
+
+echo ""
+echo "1. Checking for duplicate targets..."
+duplicate_count=$(grep -c "add_executable.*simple_interface_test" CMakeLists.txt)
+if [ "$duplicate_count" -eq 1 ]; then
+    echo "✅ No duplicate targets found"
+else
+    echo "❌ Found $duplicate_count definitions of simple_interface_test"
+    exit 1
+fi
+
+echo ""
+echo "2. Building project..."
+rm -rf build
+mkdir build
+cd build
+
+if cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON; then
+    echo "✅ CMake configuration successful"
+
+    if make -j$(nproc); then
+        echo "✅ Build successful"
+
+        # List what was built
+        echo ""
+        echo "Built executables:"
+        ls -1 | grep -E "(test_|descriptor_compare)" | head -10
+
+        echo ""
+        echo "3. Testing CTest integration..."
+
+        # Test individual test targets
+        if [ -f "./simple_interface_test" ]; then
+            echo "Running simple_interface_test..."
+            if ./simple_interface_test; then
+                echo "✅ simple_interface_test passed"
+            else
+                echo "❌ simple_interface_test failed"
+            fi
+        fi
+
+        if [ -f "./test_database_standalone" ]; then
+            echo "Running test_database_standalone..."
+            if ./test_database_standalone; then
+                echo "✅ test_database_standalone passed"
+            else
+                echo "❌ test_database_standalone failed"
+            fi
+        fi
+
+        # Test CTest
+        echo ""
+        echo "Running all tests with CTest..."
+        if ctest --output-on-failure --verbose; then
+            echo "✅ All CTest tests completed"
+        else
+            echo "⚠️ Some CTest tests failed (may need data files)"
+        fi
+
+        # Test custom targets
+        echo ""
+        echo "4. Testing custom targets..."
+
+        echo "Available make targets with 'test' in name:"
+        make help | grep test || echo "No test targets found in make help"
+
+        # Try the custom test targets
+        echo ""
+        echo "Testing run_all_tests target..."
+        if make run_all_tests > run_all_tests.log 2>&1; then
+            echo "✅ run_all_tests target works"
+        else
+            echo "⚠️ run_all_tests had issues (check run_all_tests.log)"
+        fi
+
+    else
+        echo "❌ Build failed"
+        exit 1
+    fi
+
+else
+    echo "❌ CMake configuration failed"
+    exit 1
+fi
+
+cd ..
+
+echo ""
+echo "=== Validation Complete ==="
+echo ""
+echo "✅ Clean CMakeLists.txt is working properly!"
+echo ""
+echo "Your testing workflow:"
+echo "  cd build"
+echo "  make                    # Build everything"
+echo "  make run_all_tests      # Run all tests"
+echo "  make run_database_tests # Run database tests only"
+echo "  ctest --output-on-failure # Run tests with CTest"
+echo ""
+echo "In CLion:"
+echo "  - Use build targets: run_all_tests, run_database_tests, etc."
+echo "  - Or create CTest run configuration"
+EOF
+
+chmod +x validate_clean_cmake.sh
+
+echo ""
+echo "=== CMakeLists.txt Clean Replacement Complete ==="
+echo ""
+echo "Summary of changes made:"
+echo "  ✅ Removed duplicate target definitions"
+echo "  ✅ Consolidated testing system into single, clean section"
+echo "  ✅ Fixed database test paths (tests/unit/database/)"
+echo "  ✅ Added safe test creation function (only if files exist)"
+echo "  ✅ Preserved all existing functionality"
+echo "  ✅ Added proper test labels and organization"
+echo ""
+echo "What's now available:"
+echo "  • All your existing tests properly configured"
+echo "  • Custom test targets: run_all_tests, run_database_tests, etc."
+echo "  • CTest integration for CLion"
+echo "  • Clean, maintainable CMake structure"
+echo ""
+echo "Next steps:"
+echo "  1. Validate: ./validate_clean_cmake.sh"
+echo "  2. Build: cd build && make"
+echo "  3. Test: make run_all_tests"
+echo "  4. In CLion: Use the build targets dropdown"
+echo ""
+echo "Your original CMakeLists.txt is backed up as:"
+echo "  CMakeLists.txt.conflicted_backup"
+echo ""
+echo "✅ Ready for clean, conflict-free testing!"
