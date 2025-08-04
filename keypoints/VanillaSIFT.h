@@ -89,13 +89,13 @@
 #ifndef VANILLASIFT_H
 #define VANILLASIFT_H
 
-// #include "opencv2/xfeatures2d.hpp"
-#include "opencv2/opencv_modules.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/core.hpp"
-// #include "opencv2/xfeatures2d/nonfree.hpp"  //3.0 version
-#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/opencv.hpp"
+#include "opencv4/opencv2/features2d.hpp"
+#include "opencv4/opencv2/opencv_modules.hpp"
+#include "opencv4/opencv2/imgproc/imgproc.hpp"
+#include "opencv4/opencv2/core.hpp"
+#include "opencv4/opencv2/features2d/features2d.hpp"  //3.0 version
+// #include "opencv2/features2d/features2d.hpp"
+// #include "opencv2/opencv.hpp"
 #include "opencv2/core/mat.hpp"
 #include "opencv2/core/hal/hal.hpp"
 #include <algorithm>

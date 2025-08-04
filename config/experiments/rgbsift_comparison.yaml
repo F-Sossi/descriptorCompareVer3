@@ -1,0 +1,43 @@
+experiment:
+  name: "rgbsift_vs_sift"
+  description: "Compare RGB SIFT with standard SIFT"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "data/hpatches/"
+  scenes: ["i_ajuntament", "v_wall"]  # Specific scenes for quick testing
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+
+descriptors:
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
+    normalize: true
+
+  - name: "rgbsift_color"
+    type: "rgbsift"
+    pooling: "none"
+    normalize: true
+    use_color: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+
+output:
+  results_path: "results/"
+  save_visualizations: true
+
+database:
+  enabled: false
