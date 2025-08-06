@@ -377,7 +377,6 @@ else()
     message(STATUS "Analysis integration disabled (use -DBUILD_ANALYSIS=ON to enable)")
 endif()
 
-
 # ================================
 # STAGE 7: INTERFACE MIGRATION
 # ================================
@@ -400,11 +399,14 @@ if(BUILD_INTERFACE_MIGRATION)
         )
 
         target_include_directories(thesis_migration PUBLIC
+            src/interfaces
             include
             src
             keypoints
             descriptor_compare
-        )
+         
+            ${CMAKE_SOURCE_DIR}/src
+)
 
         target_link_libraries(thesis_migration
             keypoints
@@ -415,8 +417,11 @@ if(BUILD_INTERFACE_MIGRATION)
 
         # Stage 7 migration test
         if(EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/integration/test_stage7_migration.cpp")
-            add_executable(test_stage7_migration tests/unit/integration/test_stage7_migration.cpp)
-            target_link_libraries(test_stage7_migration thesis_migration keypoints)
+            add_executable(test_stage7_migration 
+                tests/unit/integration/test_stage7_migration.cpp
+                descriptor_compare/experiment_config.cpp
+            )
+            target_link_libraries(test_stage7_migration thesis_migration keypoints ${OpenCV_LIBRARIES})
             target_include_directories(test_stage7_migration PRIVATE
                 src
                 keypoints
