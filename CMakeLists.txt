@@ -332,3 +332,106 @@ message(STATUS "")
 message(STATUS "Testing:")
 message(STATUS "  Available test targets: run_all_tests, run_database_tests, run_interface_tests, run_config_tests")
 message(STATUS "")
+
+# ================================
+# STAGE 6: ANALYSIS INTEGRATION
+# ================================
+
+# Analysis CLI runner (optional component)
+option(BUILD_ANALYSIS "Build analysis integration" ON)
+
+if(BUILD_ANALYSIS)
+    message(STATUS "Building Stage 6 analysis integration")
+
+    # Check if analysis runner exists
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/analysis_runner.cpp")
+        add_executable(analysis_runner cli/analysis_runner.cpp)
+        target_compile_features(analysis_runner PRIVATE cxx_std_17)
+
+        # No special libraries needed for basic analysis runner
+        # It calls Python scripts via system()
+
+        message(STATUS "Analysis runner configured")
+
+        # Create custom target for running analysis
+        add_custom_target(run_analysis
+            COMMAND ./analysis_runner "${CMAKE_SOURCE_DIR}/results" --full
+            DEPENDS analysis_runner
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running complete analysis pipeline on results folder"
+        )
+
+        add_custom_target(quick_analysis
+            COMMAND ./analysis_runner "${CMAKE_SOURCE_DIR}/results" --plots-only
+            DEPENDS analysis_runner
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running quick analysis (plots only)"
+        )
+
+        message(STATUS "Analysis targets configured: run_analysis, quick_analysis")
+
+    else()
+        message(WARNING "analysis_runner.cpp not found - skipping analysis integration")
+    endif()
+else()
+    message(STATUS "Analysis integration disabled (use -DBUILD_ANALYSIS=ON to enable)")
+endif()
+
+
+# ================================
+# STAGE 7: INTERFACE MIGRATION
+# ================================
+
+# Interface migration system (optional component)
+option(BUILD_INTERFACE_MIGRATION "Build interface migration system" ON)
+
+if(BUILD_INTERFACE_MIGRATION)
+    message(STATUS "Building Stage 7 interface migration")
+
+    # Check if migration files exist
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/core/descriptor/factories/DescriptorFactory.cpp")
+
+        # Create the interface migration library
+        add_library(thesis_migration
+            src/core/descriptor/factories/DescriptorFactory.cpp
+            src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+            src/core/integration/ProcessorBridge.cpp
+        )
+
+        target_include_directories(thesis_migration PUBLIC
+            include
+            src
+            keypoints
+            descriptor_compare
+        )
+
+        target_link_libraries(thesis_migration
+            keypoints
+            ${OpenCV_LIBRARIES}
+        )
+
+        target_compile_features(thesis_migration PRIVATE cxx_std_17)
+
+        # Stage 7 migration test
+        if(EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/integration/test_stage7_migration.cpp")
+            add_executable(test_stage7_migration tests/unit/integration/test_stage7_migration.cpp)
+            target_link_libraries(test_stage7_migration thesis_migration keypoints)
+            target_include_directories(test_stage7_migration PRIVATE
+                src
+                keypoints
+                descriptor_compare
+            )
+            target_compile_features(test_stage7_migration PRIVATE cxx_std_17)
+            message(STATUS "Stage 7 migration test configured")
+        endif()
+
+        message(STATUS "Interface migration system configured")
+
+    else()
+        message(WARNING "DescriptorFactory.cpp not found - skipping interface migration")
+    endif()
+else()
+    message(STATUS "Interface migration disabled (use -DBUILD_INTERFACE_MIGRATION=ON to enable)")
+endif()
+
