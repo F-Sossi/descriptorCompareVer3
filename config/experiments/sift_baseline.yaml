@@ -6,7 +6,7 @@ experiment:
 
 dataset:
   type: "hpatches"
-  path: "data/hpatches/"
+  path: "../data/"
   scenes: []  # Empty = use all scenes
 
 keypoints:

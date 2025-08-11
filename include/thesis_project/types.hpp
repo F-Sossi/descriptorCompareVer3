@@ -198,6 +198,33 @@ namespace thesis_project {
         }
     }
 
+    inline std::string toString(KeypointGenerator generator) {
+        switch (generator) {
+            case KeypointGenerator::SIFT: return "sift";
+            case KeypointGenerator::HARRIS: return "harris";
+            case KeypointGenerator::ORB: return "orb";
+            case KeypointGenerator::LOCKED_IN: return "locked_in";
+            default: return "unknown";
+        }
+    }
+
+    inline std::string toString(MatchingMethod method) {
+        switch (method) {
+            case MatchingMethod::BRUTE_FORCE: return "brute_force";
+            case MatchingMethod::FLANN: return "flann";
+            default: return "unknown";
+        }
+    }
+
+    inline std::string toString(ValidationMethod method) {
+        switch (method) {
+            case ValidationMethod::HOMOGRAPHY: return "homography";
+            case ValidationMethod::CROSS_IMAGE: return "cross_image";
+            case ValidationMethod::NONE: return "none";
+            default: return "unknown";
+        }
+    }
+
     // ================================
     // ENHANCED CONFIGURATION STRUCTURES
     // ================================

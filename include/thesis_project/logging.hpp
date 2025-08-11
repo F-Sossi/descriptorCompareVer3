@@ -67,8 +67,8 @@ namespace thesis_project {
             }
         };
         
-        // Initialize static member
-        LogLevel Logger::current_level_ = LogLevel::INFO;
+        // Initialize static member (inline to avoid multiple definitions)
+        inline LogLevel Logger::current_level_ = LogLevel::INFO;
         
         // Convenience macros
         #define LOG_DEBUG(msg) thesis_project::logging::Logger::debug(msg)

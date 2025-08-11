@@ -378,6 +378,86 @@ else()
 endif()
 
 # ================================
+# CLI EXPERIMENT RUNNER
+# ================================
+
+# CLI experiment runner using YAML configuration
+option(BUILD_EXPERIMENT_CLI "Build CLI experiment runner with YAML support" ON)
+
+if(BUILD_EXPERIMENT_CLI)
+    message(STATUS "Building CLI experiment runner")
+
+    # Check if experiment runner exists
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/experiment_runner.cpp")
+        add_executable(experiment_runner cli/experiment_runner.cpp
+                       src/core/config/YAMLConfigLoader.cpp
+                       src/core/config/ConfigurationBridge.cpp
+                       descriptor_compare/experiment_config.cpp
+                       descriptor_compare/image_processor.cpp
+                       descriptor_compare/processor_utils.cpp
+                       descriptor_compare/locked_in_keypoints.cpp)
+        
+        target_compile_features(experiment_runner PRIVATE cxx_std_17)
+        
+        # Include directories
+        target_include_directories(experiment_runner PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/descriptor_compare
+        )
+
+        # Path definitions (same as main descriptor_compare)
+        target_compile_definitions(experiment_runner PRIVATE
+            DATA_PATH="${DATA_PATH}"
+            RESULTS_PATH="${RESULTS_PATH}"
+            KEYPOINTS_PATH="${KEYPOINTS_PATH}"
+            DATABASE_PATH="${DATABASE_PATH}"
+        )
+
+        # Link libraries
+        target_link_libraries(experiment_runner
+            keypoints
+            database
+            Boost::system
+            Boost::filesystem
+        )
+
+        # Add OpenCV and other dependencies
+        if(USE_CONAN)
+            target_link_libraries(experiment_runner ${OpenCV_LIBS})
+            target_link_libraries(experiment_runner ${SQLite3_LIBS})
+        else()
+            target_link_libraries(experiment_runner ${OpenCV_LIBRARIES})
+            target_link_libraries(experiment_runner ${SQLite3_LIBRARIES})
+        endif()
+
+        # YAML-cpp dependency
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(YAMLCPP yaml-cpp)
+        endif()
+        
+        if(YAMLCPP_FOUND)
+            target_link_libraries(experiment_runner ${YAMLCPP_LIBRARIES})
+            target_include_directories(experiment_runner PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+            message(STATUS "yaml-cpp found via pkg-config for experiment runner")
+        else()
+            # Try system yaml-cpp
+            target_link_libraries(experiment_runner yaml-cpp)
+            message(STATUS "Using system yaml-cpp library for experiment runner")
+        endif()
+
+        message(STATUS "CLI experiment runner configured")
+        
+    else()
+        message(WARNING "experiment_runner.cpp not found - skipping CLI experiment runner")
+    endif()
+else()
+    message(STATUS "CLI experiment runner disabled (use -DBUILD_EXPERIMENT_CLI=ON to enable)")
+endif()
+
+# ================================
 # STAGE 7: INTERFACE MIGRATION
 # ================================
 
@@ -406,7 +486,7 @@ if(BUILD_INTERFACE_MIGRATION)
             descriptor_compare
          
             ${CMAKE_SOURCE_DIR}/src
-)
+        )
 
         target_link_libraries(thesis_migration
             keypoints

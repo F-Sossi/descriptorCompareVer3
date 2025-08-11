@@ -310,14 +310,27 @@ cmake .. && make -j$(nproc)
 
 ### Running Experiments
 
-#### Basic Usage
+#### NEW: CLI + YAML Configuration (Recommended)
 ```bash
-# Run with default configuration
+cd build
+./experiment_runner ../config/experiments/sift_baseline.yaml
+./experiment_runner ../config/experiments/rgbsift_comparison.yaml
+
+# The CLI experiment runner will:
+# 1. Load YAML experiment configuration
+# 2. Extract descriptors using YAML-defined methods
+# 3. Evaluate precision using homography validation  
+# 4. Save results to results/experiment_name/ directory
+```
+
+#### Legacy: Basic Usage
+```bash
+# Run with hardcoded configuration
 ./descriptor_compare
 
 # The program will:
 # 1. Load HPatches dataset from data/
-# 2. Extract descriptors using configured methods
+# 2. Extract descriptors using hardcoded methods
 # 3. Evaluate precision using homography validation
 # 4. Save results to results/ directory
 ```
@@ -341,7 +354,46 @@ data/
 python3 setup.py
 ```
 
-#### Configuration Options
+#### YAML Configuration Format
+
+Create experiment configurations in `config/experiments/`. Example:
+
+```yaml
+experiment:
+  name: "my_sift_experiment"
+  description: "Custom SIFT experiment"
+
+dataset:
+  path: "../data/"
+
+descriptors:
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
+  - name: "sift_with_dsp"
+    type: "sift"
+    pooling: "domain_size_pooling"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    threshold: 0.8
+  validation:
+    method: "homography"
+    threshold: 0.05
+
+output:
+  results_path: "results/"
+  save_visualizations: true
+
+database:
+  enabled: false
+```
+
+**Available descriptor types:** `sift`, `rgbsift`, `vsift`, `honc`  
+**Available pooling strategies:** `none`, `domain_size_pooling`, `stacking`
+
+#### Legacy Configuration Options
 
 **Descriptor Types:**
 - `DESCRIPTOR_SIFT`: Standard SIFT
@@ -369,7 +421,12 @@ Results folder: /path/to/results/experiment_name/v_wall
 ...
 ```
 
-**Results saved to:**
+**CLI Results saved to:**
+- `results/experiment_name/descriptor_name/scene_name/results.csv`
+- Example: `results/sift_baseline/sift/i_dome/results.csv`
+- Contains precision measurements for each image pair
+
+**Legacy Results saved to:**
 - `results/experiment_name/scene_name/results.csv`
 - Contains precision measurements for each image pair
 
@@ -383,6 +440,16 @@ descriptor-compare/
 ├── setup.py                    # Dataset download script
 ├── environment.yml             # Conda environment (optional)
 ├── conanfile.txt              # Conan dependencies (optional)
+│
+├── cli/                        # NEW: Command-line tools
+│   ├── experiment_runner.cpp   # YAML-based experiment runner
+│   └── analysis_runner.cpp     # Analysis pipeline runner
+│
+├── config/                     # NEW: YAML experiment configurations
+│   └── experiments/
+│       ├── sift_baseline.yaml
+│       ├── rgbsift_comparison.yaml
+│       └── sample_experiment.yaml
 │
 ├── keypoints/                  # Descriptor implementations
 │   ├── VanillaSIFT.h/cpp      # Base SIFT implementation
@@ -541,6 +608,50 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - **Use Release builds** for performance measurements
 - **Test in Docker** to ensure reproducible timing
 - **Profile with tools** like gdb, valgrind (available in Docker)
+
+## Quick Start Workflow
+
+### 1. Setup
+```bash
+git clone <your-repository-url>
+cd descriptor-compare
+python3 setup.py                    # Download dataset
+mkdir build && cd build
+cmake .. -DUSE_SYSTEM_PACKAGES=ON
+make -j$(nproc)
+```
+
+### 2. Run Experiments
+```bash
+# Run individual experiments
+./experiment_runner ../config/experiments/sift_baseline.yaml
+./experiment_runner ../config/experiments/rgbsift_comparison.yaml
+
+# Check results
+ls results/sift_baseline/sift/
+cat results/sift_baseline/sift/i_dome/results.csv
+```
+
+### 3. Create Custom Experiments
+```bash
+# Copy existing config
+cp ../config/experiments/sift_baseline.yaml ../config/experiments/my_experiment.yaml
+
+# Edit your config
+# Change experiment name, descriptors, parameters
+
+# Run your experiment  
+./experiment_runner ../config/experiments/my_experiment.yaml
+```
+
+### 4. Analyze Results
+```bash
+# Run analysis pipeline
+./analysis_runner results/ --full
+
+# View reports
+open analysis/outputs/analysis_report.html
+```
 
 ## Support
 
