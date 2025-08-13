@@ -2,6 +2,7 @@
 #include "../src/core/config/ConfigurationBridge.hpp"
 #include "../descriptor_compare/image_processor.hpp"
 #include "thesis_project/logging.hpp"
+#include "thesis_project/types.hpp"
 #ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
 #endif
@@ -68,20 +69,20 @@ int main(int argc, char** argv) {
             thesis_project::database::ExperimentConfig dbConfig;
             dbConfig.descriptor_type = desc_config.name;
             dbConfig.dataset_path = yaml_config.dataset.path;
-            dbConfig.pooling_strategy = desc_config.pooling_strategy;
-            dbConfig.similarity_threshold = 0.7; // Default or from YAML
-            dbConfig.max_features = desc_config.max_features;
+            dbConfig.pooling_strategy = toString(desc_config.params.pooling);
+            dbConfig.similarity_threshold = yaml_config.evaluation.params.match_threshold;
+            dbConfig.max_features = yaml_config.keypoints.params.max_features;
             dbConfig.parameters["experiment_name"] = yaml_config.experiment.name;
-            dbConfig.parameters["normalization_stage"] = desc_config.normalization_stage;
-            dbConfig.parameters["rooting_stage"] = desc_config.rooting_stage;
-            dbConfig.parameters["norm_type"] = std::to_string(desc_config.norm_type);
+            dbConfig.parameters["descriptor_type"] = toString(desc_config.type);
+            dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
+            dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
             
             auto start_time = std::chrono::high_resolution_clock::now();
             int experiment_id = db.recordConfiguration(dbConfig);
 #endif
 
             // Run existing image processing pipeline
-            bool success = image_processor::process_directory(
+            auto experiment_metrics = image_processor::process_directory(
                 yaml_config.dataset.path,
                 results_path,
                 old_config
@@ -98,21 +99,21 @@ int main(int argc, char** argv) {
                 results.descriptor_type = desc_config.name;
                 results.dataset_name = yaml_config.dataset.path;
                 results.processing_time_ms = duration.count();
-                results.mean_average_precision = 0.0; // TODO: Get actual results from image_processor
-                results.precision_at_1 = 0.0;
-                results.precision_at_5 = 0.0;
+                results.mean_average_precision = experiment_metrics.mean_average_precision;
+                results.precision_at_1 = experiment_metrics.mean_precision;
+                results.precision_at_5 = experiment_metrics.mean_precision;
                 results.recall_at_1 = 0.0;
                 results.recall_at_5 = 0.0;
-                results.total_matches = 0;
-                results.total_keypoints = 0;
-                results.metadata["success"] = success ? "true" : "false";
+                results.total_matches = experiment_metrics.total_matches;
+                results.total_keypoints = experiment_metrics.total_keypoints;
+                results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
                 
                 db.recordExperiment(results);
             }
 #endif
 
-            if (success) {
+            if (experiment_metrics.success) {
                 LOG_INFO("✅ Completed descriptor: " + desc_config.name);
             } else {
                 LOG_ERROR("❌ Failed descriptor: " + desc_config.name);

@@ -76,6 +76,23 @@ public:
             );
         )";
 
+        const char* create_keypoints_table = R"(
+            CREATE TABLE IF NOT EXISTS locked_keypoints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scene_name TEXT NOT NULL,
+                image_name TEXT NOT NULL,
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                size REAL NOT NULL,
+                angle REAL NOT NULL,
+                response REAL NOT NULL,
+                octave INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(scene_name, image_name, x, y)
+            );
+        )";
+
         char* error_msg = nullptr;
 
         int rc1 = sqlite3_exec(db, create_experiments_table, nullptr, nullptr, &error_msg);
@@ -92,12 +109,19 @@ public:
             return false;
         }
 
+        int rc3 = sqlite3_exec(db, create_keypoints_table, nullptr, nullptr, &error_msg);
+        if (rc3 != SQLITE_OK) {
+            std::cerr << "Failed to create locked_keypoints table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
         return true;
     }
 
-    std::string getCurrentTimestamp() const {
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
+    static std::string getCurrentTimestamp() {
+        const auto now = std::chrono::system_clock::now();
+        const auto time_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
         ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
         return ss.str();
@@ -122,11 +146,11 @@ bool DatabaseManager::isEnabled() const {
     return impl_->enabled && impl_->db != nullptr;
 }
 
-bool DatabaseManager::initializeTables() {
+bool DatabaseManager::initializeTables() const {
     return impl_->initializeTables();
 }
 
-int DatabaseManager::recordConfiguration(const ExperimentConfig& config) {
+int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     if (!isEnabled()) return -1;
 
     const char* sql = R"(
@@ -172,10 +196,10 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) {
     return experiment_id;
 }
 
-bool DatabaseManager::recordExperiment(const ExperimentResults& results) {
+bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     if (!isEnabled()) return true; // Success if disabled
 
-    const char* sql = R"(
+    const auto sql = R"(
         INSERT INTO results (experiment_id, mean_average_precision, precision_at_1,
                            precision_at_5, recall_at_1, recall_at_5, total_matches,
                            total_keypoints, processing_time_ms, timestamp, metadata)
@@ -210,7 +234,7 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) {
     sqlite3_bind_text(stmt, 11, metadata_str.c_str(), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
-    bool success = (rc == SQLITE_DONE);
+    const bool success = (rc == SQLITE_DONE);
 
     if (success) {
         std::cout << "Recorded experiment results (MAP: "
@@ -296,6 +320,160 @@ std::map<std::string, double> DatabaseManager::getStatistics() const {
 
     sqlite3_finalize(stmt);
     return stats;
+}
+
+bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const {
+    if (!isEnabled()) return true; // Success if disabled
+
+    const char* sql = R"(
+        INSERT OR REPLACE INTO locked_keypoints (scene_name, image_name, x, y, size, angle, response, octave, class_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
+    // First, clear existing keypoints for this scene/image
+    const char* clear_sql = "DELETE FROM locked_keypoints WHERE scene_name = ? AND image_name = ?";
+    sqlite3_stmt* clear_stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, clear_sql, -1, &clear_stmt, nullptr);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_text(clear_stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(clear_stmt, 2, image_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_step(clear_stmt);
+    }
+    sqlite3_finalize(clear_stmt);
+
+    sqlite3_stmt* stmt;
+    rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare keypoint insert statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    int stored_count = 0;
+    for (const auto& kp : keypoints) {
+        sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, image_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt, 3, kp.pt.x);
+        sqlite3_bind_double(stmt, 4, kp.pt.y);
+        sqlite3_bind_double(stmt, 5, kp.size);
+        sqlite3_bind_double(stmt, 6, kp.angle);
+        sqlite3_bind_double(stmt, 7, kp.response);
+        sqlite3_bind_int(stmt, 8, kp.octave);
+        sqlite3_bind_int(stmt, 9, kp.class_id);
+
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_DONE) {
+            stored_count++;
+        }
+        sqlite3_reset(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+    
+    std::cout << "Stored " << stored_count << " keypoints for " << scene_name << "/" << image_name << std::endl;
+    return stored_count == keypoints.size();
+}
+
+std::vector<cv::KeyPoint> DatabaseManager::getLockedKeypoints(const std::string& scene_name, const std::string& image_name) const {
+    std::vector<cv::KeyPoint> keypoints;
+    if (!isEnabled()) return keypoints;
+
+    const char* sql = R"(
+        SELECT x, y, size, angle, response, octave, class_id
+        FROM locked_keypoints
+        WHERE scene_name = ? AND image_name = ?
+        ORDER BY id;
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        return keypoints;
+    }
+
+    sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, image_name.c_str(), -1, SQLITE_STATIC);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        cv::KeyPoint kp;
+        kp.pt.x = sqlite3_column_double(stmt, 0);
+        kp.pt.y = sqlite3_column_double(stmt, 1);
+        kp.size = sqlite3_column_double(stmt, 2);
+        kp.angle = sqlite3_column_double(stmt, 3);
+        kp.response = sqlite3_column_double(stmt, 4);
+        kp.octave = sqlite3_column_int(stmt, 5);
+        kp.class_id = sqlite3_column_int(stmt, 6);
+        keypoints.push_back(kp);
+    }
+
+    sqlite3_finalize(stmt);
+    return keypoints;
+}
+
+std::vector<std::string> DatabaseManager::getAvailableScenes() const {
+    std::vector<std::string> scenes;
+    if (!isEnabled()) return scenes;
+
+    const char* sql = "SELECT DISTINCT scene_name FROM locked_keypoints ORDER BY scene_name;";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        return scenes;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        scenes.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+    }
+
+    sqlite3_finalize(stmt);
+    return scenes;
+}
+
+std::vector<std::string> DatabaseManager::getAvailableImages(const std::string& scene_name) const {
+    std::vector<std::string> images;
+    if (!isEnabled()) return images;
+
+    const char* sql = "SELECT DISTINCT image_name FROM locked_keypoints WHERE scene_name = ? ORDER BY image_name;";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        return images;
+    }
+
+    sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        images.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+    }
+
+    sqlite3_finalize(stmt);
+    return images;
+}
+
+bool DatabaseManager::clearSceneKeypoints(const std::string& scene_name) {
+    if (!isEnabled()) return true; // Success if disabled
+
+    const char* sql = "DELETE FROM locked_keypoints WHERE scene_name = ?;";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare clear statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
+    rc = sqlite3_step(stmt);
+    
+    bool success = (rc == SQLITE_DONE);
+    if (success) {
+        int deleted_count = sqlite3_changes(impl_->db);
+        std::cout << "Cleared " << deleted_count << " keypoints for scene: " << scene_name << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
 }
 
 } // namespace database

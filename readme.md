@@ -28,9 +28,9 @@ cd /workspace/build-docker && cmake .. && make -j$(nproc)
 ```bash
 git clone <your-repository-url>
 cd descriptor-compare
-sudo pacman -S base-devel cmake opencv boost tbb
+sudo pacman -S base-devel cmake opencv boost tbb sqlite
 python3 setup.py  # Downloads HPatches dataset
-mkdir build && cd build && cmake .. && make -j$(nproc)
+mkdir build && cd build && cmake .. -DBUILD_DATABASE=ON && make -j$(nproc)
 ./descriptor_compare
 ```
 
@@ -94,10 +94,10 @@ docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
 # Build project inside container
 cd /workspace
 mkdir build-docker && cd build-docker
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON -DBUILD_DATABASE=ON
 make -j$(nproc)
 
-# Run experiments
+# Run experiments (database-enabled)
 ./descriptor_compare
 ```
 
@@ -114,7 +114,7 @@ make -j$(nproc)
 ```bash
 # Install system dependencies
 sudo pacman -S base-devel cmake git python python-pip
-sudo pacman -S opencv boost tbb intel-tbb
+sudo pacman -S opencv boost tbb intel-tbb sqlite
 
 # Install OpenCV contrib (for SIFT support)
 yay -S opencv-contrib  # or paru -S opencv-contrib
@@ -124,7 +124,7 @@ git clone <your-repository-url>
 cd descriptor-compare
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
 make -j$(nproc)
 ./descriptor_compare
 ```
@@ -135,14 +135,14 @@ make -j$(nproc)
 sudo apt update
 sudo apt install build-essential cmake git python3 python3-pip
 sudo apt install libopencv-dev libopencv-contrib-dev
-sudo apt install libboost-all-dev libtbb-dev
+sudo apt install libboost-all-dev libtbb-dev libsqlite3-dev
 
 # Clone and build
 git clone <your-repository-url>
 cd descriptor-compare
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
 make -j$(nproc)
 ./descriptor_compare
 ```
@@ -153,14 +153,14 @@ make -j$(nproc)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install dependencies
-brew install cmake opencv boost tbb python3
+brew install cmake opencv boost tbb python3 sqlite
 
 # Clone and build
 git clone <your-repository-url>
 cd descriptor-compare
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
 make -j$(nproc)
 ./descriptor_compare
 ```
@@ -185,7 +185,7 @@ docker run -it --rm -v ${PWD}:/workspace descriptor-research:dev bash
 # Inside container:
 cd /workspace
 mkdir build-docker && cd build-docker
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
 make -j$(nproc)
 ./descriptor_compare
 ```
@@ -224,13 +224,13 @@ cmake --build . --config Release
 sudo apt update
 sudo apt install build-essential cmake git python3 python3-pip
 sudo apt install libopencv-dev libopencv-contrib-dev
-sudo apt install libboost-all-dev libtbb-dev
+sudo apt install libboost-all-dev libtbb-dev libsqlite3-dev
 
 git clone <your-repository-url>
 cd descriptor-compare
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
 make -j$(nproc)
 ./descriptor_compare
 ```
@@ -430,6 +430,220 @@ Results folder: /path/to/results/experiment_name/v_wall
 - `results/experiment_name/scene_name/results.csv`
 - Contains precision measurements for each image pair
 
+## Database Integration
+
+The project now features a complete database-driven workflow for experiment tracking and keypoint management.
+
+### Database Features
+
+✅ **Real-Time Experiment Tracking**: All experiments automatically tracked in SQLite database  
+✅ **Comprehensive Metrics Storage**: Precision, recall, MAP, processing time, metadata  
+✅ **Keypoint Management**: Database storage for reproducible locked-in keypoints  
+✅ **CLI Tools**: Command-line tools for database and keypoint operations  
+✅ **No More CSV Dependencies**: Database-first workflow eliminates CSV file dependencies  
+
+### Database Setup
+
+The database is **automatically enabled** with the default build:
+
+```bash
+# Database is enabled by default
+cmake .. -DBUILD_DATABASE=ON  # (default)
+make -j$(nproc)
+
+# Database file created at: build/experiments.db
+```
+
+### Using the Database
+
+#### Viewing Database Contents
+
+```bash
+cd build
+
+# SQLite CLI
+sqlite3 experiments.db
+.schema                         # View table structure
+SELECT * FROM experiments;      # View experiment configs  
+SELECT * FROM results;          # View experiment results
+SELECT * FROM locked_keypoints; # View stored keypoints
+
+# Or use any SQLite GUI tool
+```
+
+#### Database Schema
+
+**experiments** table:
+- `id`, `descriptor_type`, `dataset_name`, `pooling_strategy`
+- `similarity_threshold`, `max_features`, `timestamp`, `parameters`
+
+**results** table:
+- `experiment_id`, `mean_average_precision`, `precision_at_1`, `precision_at_5`
+- `recall_at_1`, `recall_at_5`, `total_matches`, `total_keypoints`
+- `processing_time_ms`, `timestamp`, `metadata`
+
+**locked_keypoints** table:
+- `scene_name`, `image_name`, `x`, `y`, `size`, `angle`
+- `response`, `octave`, `class_id`, `created_at`
+
+### Keypoint Management System
+
+The project includes a complete CLI tool for managing locked-in keypoints in the database.
+
+#### Keypoint Manager Commands
+
+```bash
+cd build
+
+# Generate fresh keypoints from images and store in database
+./keypoint_manager generate ../data
+
+# Import keypoints from existing CSV files for reproducibility  
+./keypoint_manager import-csv ../reference_keypoints
+
+# Export keypoints from database to CSV for long-term storage
+./keypoint_manager export-csv ./exported_keypoints
+
+# List all scenes with keypoint counts
+./keypoint_manager list-scenes
+
+# Count keypoints for specific scene/image
+./keypoint_manager count i_dome 1.ppm
+```
+
+#### Keypoint Workflow Examples
+
+**Generate Fresh Keypoints:**
+```bash
+# Clear database and generate new keypoints from all images
+./keypoint_manager generate ../data
+
+# Output:
+# 🔄 Generating fresh locked keypoints from: ../data
+# 🗑️  Clearing existing keypoints from database...
+# 📁 Processing scene: i_dome
+# ✅ Generated 6573 keypoints for i_dome/1.ppm
+# ✅ Stored 6573 keypoints for i_dome/2.ppm
+# 🎉 Generation complete! Total keypoints generated: 78876
+```
+
+**Import from CSV for Reproducibility:**
+```bash
+# Import pre-computed keypoints from reference files
+./keypoint_manager import-csv ../reference_keypoints
+
+# Perfect for:
+# - Sharing reproducible experiments
+# - Comparing against published results  
+# - Starting from known keypoint sets
+```
+
+**Export for Long-Term Storage:**
+```bash
+# Export current database keypoints to CSV files
+./keypoint_manager export-csv ./backup_keypoints
+
+# Creates organized CSV structure:
+# backup_keypoints/
+# ├── i_dome/
+# │   ├── 1ppm.csv
+# │   ├── 2ppm.csv
+# │   └── ...
+# └── v_wall/
+#     ├── 1ppm.csv
+#     └── ...
+```
+
+**Query Keypoint Status:**
+```bash
+# See what's in the database
+./keypoint_manager list-scenes
+
+# Output:
+# 📋 Available scenes (2):
+#   📁 i_dome (6 images, 39438 total keypoints)
+#   📁 v_wall (6 images, 41259 total keypoints)
+
+# Get specific counts
+./keypoint_manager count i_dome 1.ppm
+# 🔢 Keypoints for i_dome/1.ppm: 6573
+```
+
+### Database vs CSV Workflow
+
+**OLD Workflow (CSV-dependent):**
+```bash
+# 1. Generate CSV files manually
+# 2. Store keypoints in reference_keypoints/
+# 3. Load from CSV during experiments  
+# 4. Results saved to CSV files
+# 5. Analyze CSV files separately
+```
+
+**NEW Workflow (Database-first):**
+```bash
+# 1. Generate keypoints directly to database
+./keypoint_manager generate ../data
+
+# 2. Run experiments with real-time database tracking
+./experiment_runner ../config/experiments/sift_baseline.yaml
+
+# 3. Query results directly from database
+sqlite3 experiments.db "SELECT mean_average_precision, processing_time_ms FROM results;"
+
+# 4. Export only when needed for sharing
+./keypoint_manager export-csv ./published_keypoints
+```
+
+### Migration from CSV to Database
+
+If you have existing CSV keypoints:
+
+```bash
+# 1. Import your existing CSV keypoints  
+./keypoint_manager import-csv ../reference_keypoints
+
+# 2. Verify import
+./keypoint_manager list-scenes
+
+# 3. Run experiments (now uses database)
+./experiment_runner ../config/experiments/sift_baseline.yaml
+
+# 4. Your CSV files are preserved for compatibility
+```
+
+### Troubleshooting Database Issues
+
+#### Database File Not Found
+```bash
+# Database file is created automatically in build directory
+ls build/experiments.db
+
+# If missing, run any experiment to create it
+cd build && ./descriptor_compare
+```
+
+#### Permission Issues
+```bash
+# Fix database permissions
+chmod 644 build/experiments.db
+```
+
+#### View Database Statistics
+```bash
+# Check experiment history
+sqlite3 build/experiments.db "
+SELECT 
+    e.descriptor_type,
+    r.mean_average_precision,
+    r.processing_time_ms,
+    r.timestamp
+FROM experiments e 
+JOIN results r ON e.id = r.experiment_id 
+ORDER BY r.timestamp DESC 
+LIMIT 10;"
+```
+
 ## Project Structure
 
 ```
@@ -443,6 +657,7 @@ descriptor-compare/
 │
 ├── cli/                        # NEW: Command-line tools
 │   ├── experiment_runner.cpp   # YAML-based experiment runner
+│   ├── keypoint_manager.cpp    # Database keypoint management
 │   └── analysis_runner.cpp     # Analysis pipeline runner
 │
 ├── config/                     # NEW: YAML experiment configurations
@@ -465,9 +680,17 @@ descriptor-compare/
 │   ├── processor_utils.hpp    # Utility functions
 │   └── locked_in_keypoints.hpp # Keypoint management
 │
+├── database/                  # NEW: Database integration
+│   ├── schema.sql             # Database schema definition
+│   └── database_manager.cpp   # Legacy database implementation
+│
+├── src/core/database/         # NEW: Modern database system
+│   └── DatabaseManager.cpp    # SQLite integration & keypoint storage
+│
 ├── data/                      # HPatches dataset (created by setup.py)
 ├── results/                   # Experiment results
-└── reference_keypoints/       # Pre-computed keypoints
+├── reference_keypoints/       # Pre-computed keypoints (CSV)
+└── build/experiments.db       # SQLite database (auto-created)
 ```
 
 ## Troubleshooting
@@ -617,22 +840,37 @@ git clone <your-repository-url>
 cd descriptor-compare
 python3 setup.py                    # Download dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DBUILD_DATABASE=ON
 make -j$(nproc)
 ```
 
-### 2. Run Experiments
+### 2. Setup Keypoints (Database-First)
 ```bash
-# Run individual experiments
+# Generate keypoints directly to database (recommended)
+./keypoint_manager generate ../data
+
+# OR import existing CSV keypoints
+./keypoint_manager import-csv ../reference_keypoints
+
+# Verify keypoints loaded
+./keypoint_manager list-scenes
+```
+
+### 3. Run Experiments (Database-Tracked)
+```bash
+# Run individual experiments (automatically tracked in database)
 ./experiment_runner ../config/experiments/sift_baseline.yaml
 ./experiment_runner ../config/experiments/rgbsift_comparison.yaml
 
-# Check results
+# Check results in database
+sqlite3 experiments.db "SELECT * FROM results ORDER BY timestamp DESC LIMIT 5;"
+
+# OR check traditional CSV results
 ls results/sift_baseline/sift/
 cat results/sift_baseline/sift/i_dome/results.csv
 ```
 
-### 3. Create Custom Experiments
+### 4. Create Custom Experiments
 ```bash
 # Copy existing config
 cp ../config/experiments/sift_baseline.yaml ../config/experiments/my_experiment.yaml
@@ -640,17 +878,36 @@ cp ../config/experiments/sift_baseline.yaml ../config/experiments/my_experiment.
 # Edit your config
 # Change experiment name, descriptors, parameters
 
-# Run your experiment  
+# Run your experiment (results automatically tracked)
 ./experiment_runner ../config/experiments/my_experiment.yaml
 ```
 
-### 4. Analyze Results
+### 5. Query and Analyze Results
 ```bash
+# Query database for experiment comparison
+sqlite3 experiments.db "
+SELECT 
+    e.descriptor_type,
+    r.mean_average_precision,
+    r.processing_time_ms 
+FROM experiments e 
+JOIN results r ON e.id = r.experiment_id 
+ORDER BY r.mean_average_precision DESC;"
+
 # Run analysis pipeline
 ./analysis_runner results/ --full
 
 # View reports
 open analysis/outputs/analysis_report.html
+```
+
+### 6. Export Results for Sharing
+```bash
+# Export keypoints for reproducibility
+./keypoint_manager export-csv ./published_keypoints
+
+# Share database file
+cp experiments.db ./my_research_results.db
 ```
 
 ## Support

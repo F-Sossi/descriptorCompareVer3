@@ -164,6 +164,7 @@ if(BUILD_DATABASE AND EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseMana
 
     target_link_libraries(thesis_database
         ${SQLite3_LIBRARIES}
+        ${OpenCV_LIBS}
     )
 
     target_compile_features(thesis_database PRIVATE cxx_std_17)
@@ -385,11 +386,14 @@ else()
 endif()
 
 # ================================
-# CLI EXPERIMENT RUNNER
+# CLI TOOLS
 # ================================
 
 # CLI experiment runner using YAML configuration
 option(BUILD_EXPERIMENT_CLI "Build CLI experiment runner with YAML support" ON)
+
+# Keypoint manager CLI tool
+option(BUILD_KEYPOINT_MANAGER "Build keypoint manager CLI tool" ON)
 
 if(BUILD_EXPERIMENT_CLI)
     message(STATUS "Building CLI experiment runner")
@@ -468,6 +472,63 @@ if(BUILD_EXPERIMENT_CLI)
     endif()
 else()
     message(STATUS "CLI experiment runner disabled (use -DBUILD_EXPERIMENT_CLI=ON to enable)")
+endif()
+
+# Keypoint manager CLI tool
+if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
+    message(STATUS "Building keypoint manager CLI tool")
+    
+    # Check if keypoint manager exists
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
+        add_executable(keypoint_manager cli/keypoint_manager.cpp
+                       descriptor_compare/locked_in_keypoints.cpp)
+        
+        target_compile_features(keypoint_manager PRIVATE cxx_std_17)
+        
+        # Include directories
+        target_include_directories(keypoint_manager PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/descriptor_compare
+        )
+
+        # Path definitions
+        target_compile_definitions(keypoint_manager PRIVATE
+            DATA_PATH="${DATA_PATH}"
+            RESULTS_PATH="${RESULTS_PATH}"
+            KEYPOINTS_PATH="${KEYPOINTS_PATH}"
+            DATABASE_PATH="${DATABASE_PATH}"
+            BUILD_DATABASE=1
+        )
+
+        # Link libraries
+        target_link_libraries(keypoint_manager
+            thesis_database
+            Boost::system
+            Boost::filesystem
+        )
+
+        # Add OpenCV and other dependencies
+        if(USE_CONAN)
+            target_link_libraries(keypoint_manager ${OpenCV_LIBS})
+            target_link_libraries(keypoint_manager ${SQLite3_LIBS})
+        else()
+            target_link_libraries(keypoint_manager ${OpenCV_LIBRARIES})
+            target_link_libraries(keypoint_manager ${SQLite3_LIBRARIES})
+        endif()
+
+        message(STATUS "Keypoint manager CLI tool configured")
+        
+    else()
+        message(WARNING "keypoint_manager.cpp not found - skipping keypoint manager CLI")
+    endif()
+else()
+    if(NOT BUILD_DATABASE)
+        message(STATUS "Keypoint manager disabled - requires database integration (use -DBUILD_DATABASE=ON)")
+    else()
+        message(STATUS "Keypoint manager disabled (use -DBUILD_KEYPOINT_MANAGER=ON to enable)")
+    endif()
 endif()
 
 # ================================

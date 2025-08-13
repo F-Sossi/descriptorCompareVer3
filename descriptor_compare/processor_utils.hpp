@@ -15,7 +15,7 @@ class processor_utils {
 public:
     static cv::Mat applyGaussianNoise(const cv::Mat& image, double mean, double stddev);
 
-    static std::pair<std::vector<cv::KeyPoint>, cv::Mat> detectAndCompute(cv::Ptr<cv::Feature2D> detector, const cv::Mat& image);
+    static std::pair<std::vector<cv::KeyPoint>, cv::Mat> detectAndCompute(const cv::Ptr<cv::Feature2D> &detector, const cv::Mat &image);
 
     static void sumPoolingDetectAndCompute(const cv::Ptr<cv::Feature2D>& detector, const cv::Mat& image,
                                            std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);

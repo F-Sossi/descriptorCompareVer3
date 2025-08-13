@@ -3,6 +3,7 @@
 #include <vector>
 #include <future>
 #include <string>
+#include <chrono>
 
 #include "experiment_config.hpp"
 #include "image_processor.hpp"
@@ -24,18 +25,23 @@ cv::Scalar getKeypointColor(size_t index) {
     return colors[index % colors.size()];
 }
 
-bool image_processor::process_directory(const std::string &data_folder, const std::string &results_folder, const experiment_config &config) {
+ExperimentMetrics image_processor::process_directory(const std::string &data_folder, const std::string &results_folder, const experiment_config &config) {
+    ExperimentMetrics overall_metrics;
+    auto start_time = std::chrono::high_resolution_clock::now();
     try {
         if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
             std::cerr << "Invalid data folder: " << data_folder << std::endl;
-            return false;
+            overall_metrics.success = false;
+            overall_metrics.error_message = "Invalid data folder: " + data_folder;
+            return overall_metrics;
         }
 
         if (!fs::exists(results_folder)) {
             fs::create_directories(results_folder);
         }
 
-        std::vector<std::future<void>> futures;
+        std::vector<std::future<ExperimentMetrics>> futures;
+        std::vector<ExperimentMetrics> folder_metrics;
 
         for (const auto &entry : fs::directory_iterator(data_folder)) {
             const auto &path = entry.path();
@@ -46,17 +52,25 @@ bool image_processor::process_directory(const std::string &data_folder, const st
 
                 // Asynchronous execution path using std::async
                 if (config.useMultiThreading) {
-                    auto fut = std::async(std::launch::async, [&, path, results_subfolder]() {
+                    auto fut = std::async(std::launch::async, [&, path, results_subfolder, subfolder]() -> ExperimentMetrics {
                         try {
                             if(config.descriptorOptions.UseLockedInKeypoints) {
-                                process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
+                                return process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
                             } else {
-                                process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
+                                return process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
                             }
                         } catch (const std::exception &e) {
                             std::cerr << "Exception in async task: " << e.what() << std::endl;
+                            ExperimentMetrics error_metrics;
+                            error_metrics.success = false;
+                            error_metrics.error_message = "Exception in async task: " + std::string(e.what());
+                            return error_metrics;
                         } catch (...) {
                             std::cerr << "Unknown exception in async task" << std::endl;
+                            ExperimentMetrics error_metrics;
+                            error_metrics.success = false;
+                            error_metrics.error_message = "Unknown exception in async task";
+                            return error_metrics;
                         }
                     });
                     futures.push_back(std::move(fut));
@@ -64,43 +78,103 @@ bool image_processor::process_directory(const std::string &data_folder, const st
                     // Synchronous (sequential) execution path
                 else {
                     try {
+                        ExperimentMetrics folder_result;
                         if (config.verificationType == MATCHES) {
                             visual_verification_matches(path.string(), results_subfolder, config);
+                            // Visual verification doesn't return metrics, mark as successful but no data
+                            folder_result.success = true;
                         } else if (config.verificationType == HOMOGRAPHY) {
                             visual_verification_homography(path.string(), results_subfolder, config);
+                            // Visual verification doesn't return metrics, mark as successful but no data
+                            folder_result.success = true;
                         } else {
                             if(config.descriptorOptions.UseLockedInKeypoints) {
-                                process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
+                                folder_result = process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
                             } else {
-                                process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
+                                folder_result = process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
                             }
                         }
+                        folder_metrics.push_back(folder_result);
                     } catch (const std::exception &e) {
                         std::cerr << "Exception in synchronous task: " << e.what() << std::endl;
+                        ExperimentMetrics error_metrics;
+                        error_metrics.success = false;
+                        error_metrics.error_message = "Exception in synchronous task: " + std::string(e.what());
+                        folder_metrics.push_back(error_metrics);
                     } catch (...) {
                         std::cerr << "Unknown exception in synchronous task" << std::endl;
+                        ExperimentMetrics error_metrics;
+                        error_metrics.success = false;
+                        error_metrics.error_message = "Unknown exception in synchronous task";
+                        folder_metrics.push_back(error_metrics);
                     }
                 }
             }
         }
 
-        // Wait for all asynchronous tasks to complete
+        // Wait for all asynchronous tasks to complete and collect results
         if (config.useMultiThreading) {
             for (auto &fut : futures) {
                 try {
-                    fut.get(); // This blocks until the future's task is complete
+                    ExperimentMetrics result = fut.get(); // This blocks until the future's task is complete
+                    folder_metrics.push_back(result);
                 } catch (const std::exception &e) {
                     std::cerr << "Exception caught during future.get(): " << e.what() << std::endl;
+                    ExperimentMetrics error_metrics;
+                    error_metrics.success = false;
+                    error_metrics.error_message = "Exception during future.get(): " + std::string(e.what());
+                    folder_metrics.push_back(error_metrics);
                 } catch (...) {
                     std::cerr << "Unknown exception caught during future.get()" << std::endl;
+                    ExperimentMetrics error_metrics;
+                    error_metrics.success = false;
+                    error_metrics.error_message = "Unknown exception during future.get()";
+                    folder_metrics.push_back(error_metrics);
                 }
             }
         }
 
-        return true;
+        // Aggregate all folder metrics into overall metrics
+        overall_metrics.success = true;
+        for (const auto& folder_metric : folder_metrics) {
+            if (!folder_metric.success) {
+                overall_metrics.success = false;
+                if (!overall_metrics.error_message.empty()) {
+                    overall_metrics.error_message += "; ";
+                }
+                overall_metrics.error_message += folder_metric.error_message;
+            }
+            
+            // Aggregate metrics
+            for (double precision : folder_metric.precisions_per_image) {
+                overall_metrics.precisions_per_image.push_back(precision);
+            }
+            overall_metrics.total_matches += folder_metric.total_matches;
+            overall_metrics.total_keypoints += folder_metric.total_keypoints;
+            overall_metrics.total_images_processed += folder_metric.total_images_processed;
+            
+            // Merge per-scene statistics
+            for (const auto& [scene, precision] : folder_metric.per_scene_precision) {
+                overall_metrics.per_scene_precision[scene] = precision;
+                overall_metrics.per_scene_matches[scene] = folder_metric.per_scene_matches.at(scene);
+                overall_metrics.per_scene_keypoints[scene] = folder_metric.per_scene_keypoints.at(scene);
+            }
+        }
+        
+        // Calculate final metrics
+        overall_metrics.calculateMeanPrecision();
+        
+        // Calculate processing time
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        overall_metrics.processing_time_ms = duration.count();
+
+        return overall_metrics;
     } catch (const std::exception &e) {
         std::cerr << "Error processing directory: " << e.what() << std::endl;
-        return false;
+        overall_metrics.success = false;
+        overall_metrics.error_message = "Error processing directory: " + std::string(e.what());
+        return overall_metrics;
     }
 }
 
@@ -167,8 +241,10 @@ bool image_processor::process_directory(const std::string &data_folder, const st
     }
 }*/
 
-void image_processor::process_image_folder_keypoints_locked(const std::string &folder, const std::string &results_folder,
+ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const std::string &folder, const std::string &results_folder,
                                                             const experiment_config &config) {
+    ExperimentMetrics metrics;
+    std::string scene_name = boost::filesystem::path(folder).filename().string();
     std::cout << "Processing locked folder: " << folder << "\nResults folder: " << results_folder << std::endl;
 
     boost::filesystem::create_directories(results_folder);
@@ -178,7 +254,9 @@ void image_processor::process_image_folder_keypoints_locked(const std::string &f
 
     if (image1.empty()) {
         std::cerr << "Failed to read image: " << folder + "/1.ppm" << std::endl;
-        return;
+        metrics.success = false;
+        metrics.error_message = "Failed to read image: " + folder + "/1.ppm";
+        return metrics;
     }
 
     // Load locked-in keypoints for image 1
@@ -251,13 +329,23 @@ void image_processor::process_image_folder_keypoints_locked(const std::string &f
         }
         double precision = static_cast<double>(correctMatches) / matches.size();
 
+        // Capture metrics (in addition to CSV for now)
+        metrics.addImageResult(scene_name, precision, matches.size(), keypoints2.size());
+
         std::vector<std::string> headers = {"Image_Reference", "Precision"};
         processor_utils::saveResults(results_folder + "/results.csv", headers, {{std::to_string(i), std::to_string(precision)}});
     }
+
+    // Finalize metrics calculation
+    metrics.calculateMeanPrecision();
+    metrics.success = true;
+    return metrics;
 }
 
-void image_processor::process_image_folder_keypoints_unlocked(const std::string &folder, const std::string &results_folder,
+ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const std::string &folder, const std::string &results_folder,
                                                               const experiment_config &config) {
+    ExperimentMetrics metrics;
+    std::string scene_name = boost::filesystem::path(folder).filename().string();
     std::cout << "Processing folder: " << folder << "\nResults folder: " << results_folder << std::endl;
 
     boost::filesystem::create_directories(results_folder);
@@ -329,11 +417,18 @@ void image_processor::process_image_folder_keypoints_unlocked(const std::string 
         // Calculate precision
         double precision = processor_utils::calculatePrecision(topMatches, keypoints2, projectedPoints, adjustedThreshold);
 
+        // Capture metrics (in addition to CSV for now)
+        metrics.addImageResult(scene_name, precision, topMatches.size(), keypoints2.size());
+
         std::vector<std::string> headers = {"Image_Reference", "Precision"};
         processor_utils::saveResults(results_folder + "/results.csv", headers, {{std::to_string(i), std::to_string(precision)}});
 
     }
 
+    // Finalize metrics calculation
+    metrics.calculateMeanPrecision();
+    metrics.success = true;
+    return metrics;
 }
 
 // TODO: Reach goal fix this so you can compare different modifications (not needed but nice to have)

@@ -153,32 +153,41 @@ int main() {
                         dbConfig.parameters["norm_type"] = normTypeToString(normType);
                         dbConfig.parameters["image_type"] = imageTypeToString(options.imageType);
                         
-                        auto start_time = std::chrono::high_resolution_clock::now();
                         int experiment_id = db.recordConfiguration(dbConfig);
 #endif
                         
-                        // Run the descriptor extraction process
-                        success = image_processor::process_directory(dataPath, experimentPath, config);
+                        // Run the descriptor extraction process and get real metrics
+                        ExperimentMetrics experiment_metrics = image_processor::process_directory(dataPath, experimentPath, config);
+                        success = experiment_metrics.success;
                         
 #ifdef BUILD_DATABASE
                         if (experiment_id != -1) {
-                            auto end_time = std::chrono::high_resolution_clock::now();
-                            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-                            
-                            // Record experiment results (placeholder values for now)
+                            // Record experiment results with real computed metrics
                             thesis_project::database::ExperimentResults results;
                             results.experiment_id = experiment_id;
                             results.descriptor_type = descriptorName;
                             results.dataset_name = dataPath;
-                            results.processing_time_ms = duration.count();
-                            results.mean_average_precision = 0.0; // TODO: Get actual results from image_processor
-                            results.precision_at_1 = 0.0;
-                            results.precision_at_5 = 0.0;
-                            results.recall_at_1 = 0.0;
-                            results.recall_at_5 = 0.0;
-                            results.total_matches = 0;
-                            results.total_keypoints = 0;
-                            results.metadata["success"] = success ? "true" : "false";
+                            results.processing_time_ms = experiment_metrics.processing_time_ms;
+                            results.mean_average_precision = experiment_metrics.mean_average_precision;
+                            results.precision_at_1 = experiment_metrics.precision_at_1;
+                            results.precision_at_5 = experiment_metrics.precision_at_5;
+                            results.recall_at_1 = experiment_metrics.recall_at_1;
+                            results.recall_at_5 = experiment_metrics.recall_at_5;
+                            results.total_matches = experiment_metrics.total_matches;
+                            results.total_keypoints = experiment_metrics.total_keypoints;
+                            results.metadata["success"] = experiment_metrics.success ? "true" : "false";
+                            results.metadata["total_images"] = std::to_string(experiment_metrics.total_images_processed);
+                            
+                            // Add per-scene precision to metadata
+                            for (const auto& [scene, precision] : experiment_metrics.per_scene_precision) {
+                                results.metadata[scene + "_precision"] = std::to_string(precision);
+                                results.metadata[scene + "_matches"] = std::to_string(experiment_metrics.per_scene_matches.at(scene));
+                                results.metadata[scene + "_keypoints"] = std::to_string(experiment_metrics.per_scene_keypoints.at(scene));
+                            }
+                            
+                            if (!experiment_metrics.error_message.empty()) {
+                                results.metadata["error"] = experiment_metrics.error_message;
+                            }
                             
                             db.recordExperiment(results);
                         }

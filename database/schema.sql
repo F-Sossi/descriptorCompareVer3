@@ -27,3 +27,19 @@ CREATE TABLE IF NOT EXISTS results (
     metadata TEXT,
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
 );
+
+-- Locked-in keypoints storage
+CREATE TABLE IF NOT EXISTS locked_keypoints (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scene_name TEXT NOT NULL,
+    image_name TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    size REAL NOT NULL,
+    angle REAL NOT NULL,
+    response REAL NOT NULL,
+    octave INTEGER NOT NULL,
+    class_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scene_name, image_name, x, y)
+);

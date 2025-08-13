@@ -32,7 +32,7 @@ cv::Mat processor_utils::applyGaussianNoise(const cv::Mat& image, double mean, d
     return noisyImage;
 }
 
-std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndCompute(cv::Ptr<cv::Feature2D> detector, const cv::Mat& image) {
+std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndCompute(const cv::Ptr<cv::Feature2D>& detector, const cv::Mat& image) {
     std::vector<cv::KeyPoint> keypoints;
     cv::Mat descriptors;
     detector->detectAndCompute(image, cv::noArray(), keypoints, descriptors);
@@ -79,7 +79,7 @@ void processor_utils::saveResults(const std::string& filePath, const std::vector
     std::ofstream file;
 
     // Check if the file already exists
-    bool fileExists = std::ifstream(filePath).good();
+    const bool fileExists = std::ifstream(filePath).good();
 
     // Open the file in append mode
     file.open(filePath, std::ios::out | std::ios::app);
@@ -191,8 +191,7 @@ cv::Mat processor_utils::computeDSPDescriptor(const cv::Mat& image, const std::v
         // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
         // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
         // Features2D interface.
-        cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(featureExtractor);
-        if (vanillaSiftExtractor) {
+        if (const cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(featureExtractor)) {
             // featureExtractor is pointing to a VanillaSIFT object
             vanillaSiftExtractor->compute(im_scaled, keypoints_scaled, descriptors_scaled);
         } else {
@@ -240,8 +239,7 @@ cv::Mat processor_utils::computeStackedDescriptor(const cv::Mat& image, std::vec
     // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
     // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
     // Features2D interface.
-    cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(detector1);
-    if (vanillaSiftExtractor) {
+    if (cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(detector1)) {
         // featureExtractor is pointing to a VanillaSIFT object
         vanillaSiftExtractor->compute(image1, keypoints, descriptor1);
     } else {
@@ -257,8 +255,7 @@ cv::Mat processor_utils::computeStackedDescriptor(const cv::Mat& image, std::vec
     }
 
     // Compute second descriptor with detector 2
-    cv::Ptr<VanillaSIFT> vanillaSiftExtractor2 = dynamic_pointer_cast<VanillaSIFT>(detector2);
-    if (vanillaSiftExtractor2) {
+    if (cv::Ptr<VanillaSIFT> vanillaSiftExtractor2 = dynamic_pointer_cast<VanillaSIFT>(detector2)) {
         // featureExtractor is pointing to a VanillaSIFT object
         vanillaSiftExtractor2->compute(image2, keypoints, descriptor2);
     } else {
@@ -297,8 +294,7 @@ std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeW
             // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
             // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
             // Features2D interface.
-            cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(config.detector);
-            if (vanillaSiftExtractor) {
+            if (const cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(config.detector)) {
                 // featureExtractor is pointing to a VanillaSIFT object
                 vanillaSiftExtractor->compute(im, result.first, result.second);
             } else {

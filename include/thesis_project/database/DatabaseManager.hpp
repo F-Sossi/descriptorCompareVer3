@@ -5,6 +5,8 @@
 #include <memory>
 #include <map>
 #include <vector>
+#include <opencv2/opencv.hpp>
+#include <opencv2/features2d.hpp>
 
 namespace thesis_project {
 namespace database {
@@ -58,14 +60,14 @@ public:
      * @param results Results from descriptor comparison experiment
      * @return true if successfully recorded (or disabled), false on error
      */
-    bool recordExperiment(const ExperimentResults& results);
+    bool recordExperiment(const ExperimentResults& results) const;
 
     /**
      * @brief Record experiment configuration
      * @param config Configuration used for experiment
      * @return experiment_id for linking results, or -1 if disabled/error
      */
-    int recordConfiguration(const ExperimentConfig& config);
+    int recordConfiguration(const ExperimentConfig& config) const;
 
     /**
      * @brief Get recent experiment results
@@ -81,10 +83,47 @@ public:
     std::map<std::string, double> getStatistics() const;
 
     /**
+     * @brief Store locked-in keypoints for a specific scene and image
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm")
+     * @param keypoints Vector of OpenCV keypoints to store
+     * @return true if successfully stored
+     */
+    bool storeLockedKeypoints(const std::string& scene_name, const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const;
+
+    /**
+     * @brief Retrieve locked-in keypoints for a specific scene and image
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm")
+     * @return Vector of OpenCV keypoints (empty if not found or disabled)
+     */
+    std::vector<cv::KeyPoint> getLockedKeypoints(const std::string& scene_name, const std::string& image_name) const;
+
+    /**
+     * @brief Get all available scenes with locked keypoints
+     * @return Vector of scene names
+     */
+    std::vector<std::string> getAvailableScenes() const;
+
+    /**
+     * @brief Get all available images for a specific scene
+     * @param scene_name Name of the scene
+     * @return Vector of image names
+     */
+    std::vector<std::string> getAvailableImages(const std::string& scene_name) const;
+
+    /**
+     * @brief Delete all locked keypoints for a specific scene
+     * @param scene_name Name of the scene to clear
+     * @return true if successful
+     */
+    bool clearSceneKeypoints(const std::string& scene_name);
+
+    /**
      * @brief Initialize database tables (safe to call multiple times)
      * @return true if successful or disabled
      */
-    bool initializeTables();
+    bool initializeTables() const;
 
 private:
     class Impl;
