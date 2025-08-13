@@ -3,6 +3,10 @@
 #include "experiment_config.hpp"
 #include "locked_in_keypoints.hpp"
 #include <boost/filesystem.hpp>  // Add this include
+#ifdef BUILD_DATABASE
+#include "thesis_project/database/DatabaseManager.hpp"
+#endif
+#include <chrono>
 
 namespace fs = boost::filesystem;  // Add this namespace alias
 
@@ -77,14 +81,24 @@ int main() {
     std::string dataPath = DATA_PATH;
     std::string resultsPath = RESULTS_PATH;
 
+#ifdef BUILD_DATABASE
+    // Initialize database for experiment tracking
+    thesis_project::database::DatabaseManager db("experiments.db", true);
+    if (db.isEnabled()) {
+        std::cout << "Database tracking enabled\n";
+    } else {
+        std::cout << "Database tracking disabled\n";
+    }
+#endif
+
     bool success = false;
 
-    // Define all possible options
-    std::vector<PoolingStrategy> poolingStrategies = {DOMAIN_SIZE_POOLING, NONE};
-    std::vector<NormalizationStage> normalizationStages = {NO_NORMALIZATION, BEFORE_POOLING, AFTER_POOLING};
-    std::vector<RootingStage> rootingStages = {R_NONE, R_BEFORE_POOLING}; // R_AFTER_POOLING was worse in all cases
-    std::vector<int> normTypes = {cv::NORM_L1}; // L2 Norm was worse in all cases
-    std::vector<DescriptorType> descriptorTypes = {DESCRIPTOR_vSIFT, DESCRIPTOR_RGBSIFT, DESCRIPTOR_SIFT, DESCRIPTOR_HoNC}; // Example descriptor types
+    // Simple SIFT baseline experiment
+    std::vector<PoolingStrategy> poolingStrategies = {NONE};
+    std::vector<NormalizationStage> normalizationStages = {NO_NORMALIZATION};
+    std::vector<RootingStage> rootingStages = {R_NONE};
+    std::vector<int> normTypes = {cv::NORM_L2}; // Standard L2 norm for SIFT
+    std::vector<DescriptorType> descriptorTypes = {DESCRIPTOR_SIFT}; // Just OpenCV SIFT
 
     // Create a progress bar
 //    tqdm bar;
@@ -106,17 +120,11 @@ int main() {
                         options.normType = normType;
                         options.normalizationStage = normalization;
                         options.rootingStage = rooting;
-                        options.descriptorType2 = DESCRIPTOR_vSIFT;
-                        // Set the color type to match the descriptor type BW or COLOR ex: SIFT is BW
-                        options.imageType = COLOR;
-
-                        // Determine the color space for the descriptor based in the descriptor type
-                        // TODO: This is in the wrong spot need to deal with this in the dsp and stacking methods
-                        if (descriptorType == DESCRIPTOR_RGBSIFT || descriptorType == DESCRIPTOR_HoNC) {
-                            options.descriptorColorSpace = D_COLOR;
-                        } else{
-                            options.descriptorColorSpace = D_BW;
-                        }
+                        options.descriptorType2 = DESCRIPTOR_SIFT;
+                        // Set to grayscale for standard SIFT
+                        options.imageType = BW;
+                        // Standard SIFT uses grayscale
+                        options.descriptorColorSpace = D_BW;
 
                         // Create experiment configuration with descriptor options and type
                         experiment_config config(options);
@@ -131,8 +139,50 @@ int main() {
 
                         // append the descriptor name to the results path
                         experimentPath += descriptorName;
+                        
+#ifdef BUILD_DATABASE
+                        // Record experiment configuration
+                        thesis_project::database::ExperimentConfig dbConfig;
+                        dbConfig.descriptor_type = descriptorName;
+                        dbConfig.dataset_path = dataPath;
+                        dbConfig.pooling_strategy = poolingStrategyToString(pooling);
+                        dbConfig.similarity_threshold = 0.7; // Default threshold
+                        dbConfig.max_features = 1000; // Default max features
+                        dbConfig.parameters["normalization"] = normalizationStageToString(normalization);
+                        dbConfig.parameters["rooting"] = rootingStageToString(rooting);
+                        dbConfig.parameters["norm_type"] = normTypeToString(normType);
+                        dbConfig.parameters["image_type"] = imageTypeToString(options.imageType);
+                        
+                        auto start_time = std::chrono::high_resolution_clock::now();
+                        int experiment_id = db.recordConfiguration(dbConfig);
+#endif
+                        
                         // Run the descriptor extraction process
                         success = image_processor::process_directory(dataPath, experimentPath, config);
+                        
+#ifdef BUILD_DATABASE
+                        if (experiment_id != -1) {
+                            auto end_time = std::chrono::high_resolution_clock::now();
+                            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+                            
+                            // Record experiment results (placeholder values for now)
+                            thesis_project::database::ExperimentResults results;
+                            results.experiment_id = experiment_id;
+                            results.descriptor_type = descriptorName;
+                            results.dataset_name = dataPath;
+                            results.processing_time_ms = duration.count();
+                            results.mean_average_precision = 0.0; // TODO: Get actual results from image_processor
+                            results.precision_at_1 = 0.0;
+                            results.precision_at_5 = 0.0;
+                            results.recall_at_1 = 0.0;
+                            results.recall_at_5 = 0.0;
+                            results.total_matches = 0;
+                            results.total_keypoints = 0;
+                            results.metadata["success"] = success ? "true" : "false";
+                            
+                            db.recordExperiment(results);
+                        }
+#endif
 
 //                        // Update the progress bar
 //                        bar.update();

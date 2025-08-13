@@ -167,6 +167,7 @@ if(BUILD_DATABASE AND EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseMana
     )
 
     target_compile_features(thesis_database PRIVATE cxx_std_17)
+    target_compile_definitions(thesis_database PUBLIC BUILD_DATABASE=1)
     message(STATUS "Stage 5: Thesis database library configured")
 else()
     message(STATUS "Stage 5: Database integration disabled or files not found")
@@ -193,6 +194,12 @@ target_link_libraries(descriptor_compare
     Boost::system
     Boost::filesystem
 )
+
+# Add database integration if enabled
+if(BUILD_DATABASE)
+    target_link_libraries(descriptor_compare thesis_database)
+    target_compile_definitions(descriptor_compare PRIVATE BUILD_DATABASE=1)
+endif()
 
 if(USE_CONAN)
     target_link_libraries(descriptor_compare ${OpenCV_LIBS})
@@ -422,6 +429,12 @@ if(BUILD_EXPERIMENT_CLI)
             Boost::system
             Boost::filesystem
         )
+
+        # Add database integration if enabled
+        if(BUILD_DATABASE)
+            target_link_libraries(experiment_runner thesis_database)
+            target_compile_definitions(experiment_runner PRIVATE BUILD_DATABASE=1)
+        endif()
 
         # Add OpenCV and other dependencies
         if(USE_CONAN)

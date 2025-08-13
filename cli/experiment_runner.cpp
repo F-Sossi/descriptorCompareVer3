@@ -2,8 +2,12 @@
 #include "../src/core/config/ConfigurationBridge.hpp"
 #include "../descriptor_compare/image_processor.hpp"
 #include "thesis_project/logging.hpp"
+#ifdef BUILD_DATABASE
+#include "thesis_project/database/DatabaseManager.hpp"
+#endif
 #include <iostream>
 #include <filesystem>
+#include <chrono>
 
 using namespace thesis_project;
 
@@ -27,6 +31,16 @@ int main(int argc, char** argv) {
         LOG_INFO("Loading experiment configuration from: " + config_path);
         auto yaml_config = config::YAMLConfigLoader::loadFromFile(config_path);
 
+#ifdef BUILD_DATABASE
+        // Initialize database for experiment tracking
+        thesis_project::database::DatabaseManager db("experiments.db", true);
+        if (db.isEnabled()) {
+            LOG_INFO("Database tracking enabled");
+        } else {
+            LOG_INFO("Database tracking disabled");
+        }
+#endif
+
         LOG_INFO("Experiment: " + yaml_config.experiment.name);
         LOG_INFO("Description: " + yaml_config.experiment.description);
         LOG_INFO("Dataset: " + yaml_config.dataset.path);
@@ -49,12 +63,54 @@ int main(int argc, char** argv) {
             std::string results_path = results_base + "/" + desc_config.name;
             std::filesystem::create_directories(results_path);
 
+#ifdef BUILD_DATABASE
+            // Record experiment configuration
+            thesis_project::database::ExperimentConfig dbConfig;
+            dbConfig.descriptor_type = desc_config.name;
+            dbConfig.dataset_path = yaml_config.dataset.path;
+            dbConfig.pooling_strategy = desc_config.pooling_strategy;
+            dbConfig.similarity_threshold = 0.7; // Default or from YAML
+            dbConfig.max_features = desc_config.max_features;
+            dbConfig.parameters["experiment_name"] = yaml_config.experiment.name;
+            dbConfig.parameters["normalization_stage"] = desc_config.normalization_stage;
+            dbConfig.parameters["rooting_stage"] = desc_config.rooting_stage;
+            dbConfig.parameters["norm_type"] = std::to_string(desc_config.norm_type);
+            
+            auto start_time = std::chrono::high_resolution_clock::now();
+            int experiment_id = db.recordConfiguration(dbConfig);
+#endif
+
             // Run existing image processing pipeline
             bool success = image_processor::process_directory(
                 yaml_config.dataset.path,
                 results_path,
                 old_config
             );
+            
+#ifdef BUILD_DATABASE
+            if (experiment_id != -1) {
+                auto end_time = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+                
+                // Record experiment results
+                thesis_project::database::ExperimentResults results;
+                results.experiment_id = experiment_id;
+                results.descriptor_type = desc_config.name;
+                results.dataset_name = yaml_config.dataset.path;
+                results.processing_time_ms = duration.count();
+                results.mean_average_precision = 0.0; // TODO: Get actual results from image_processor
+                results.precision_at_1 = 0.0;
+                results.precision_at_5 = 0.0;
+                results.recall_at_1 = 0.0;
+                results.recall_at_5 = 0.0;
+                results.total_matches = 0;
+                results.total_keypoints = 0;
+                results.metadata["success"] = success ? "true" : "false";
+                results.metadata["experiment_name"] = yaml_config.experiment.name;
+                
+                db.recordExperiment(results);
+            }
+#endif
 
             if (success) {
                 LOG_INFO("✅ Completed descriptor: " + desc_config.name);
