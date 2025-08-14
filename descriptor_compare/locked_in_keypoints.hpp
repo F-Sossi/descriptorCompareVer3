@@ -7,6 +7,10 @@
 #include <boost/filesystem.hpp>  // Add this include
 #include <vector>  // Add this for std::vector
 
+#ifdef BUILD_DATABASE
+#include "thesis_project/database/DatabaseManager.hpp"
+#endif
+
 namespace fs = boost::filesystem;  // Add this namespace alias
 
 class LockedInKeypoints {
@@ -16,6 +20,16 @@ public:
     static std::vector<cv::KeyPoint> readKeypointsFromCSV(const std::string& filePath);
     static void displayLockedInKeypointsBorder(const std::string &dataFolderPath);
     static void saveLockedInKeypointsBorder(const std::string& dataFolderPath);
+
+#ifdef BUILD_DATABASE
+    /**
+     * @brief Generate locked-in keypoints with proper boundary filtering and store in database
+     * @param dataFolderPath Path to HPatches data folder containing scene subdirectories
+     * @param db Database manager for storing keypoints
+     */
+    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+                                                   const thesis_project::database::DatabaseManager& db);
+#endif
 
 private:
     static void saveKeypointsToCSV(const std::string& filePath, const std::vector<cv::KeyPoint>& keypoints);

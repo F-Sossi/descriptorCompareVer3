@@ -101,6 +101,100 @@ void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderP
     }
 }
 
+#ifdef BUILD_DATABASE
+void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+                                                           const thesis_project::database::DatabaseManager& db) {
+    if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
+        throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
+    }
+
+    for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
+        const fs::path subfolderPath = entry.path();
+        if (fs::is_directory(subfolderPath)) {
+            const std::string subfolderName = subfolderPath.filename().generic_string();
+
+            const fs::path image1Path = subfolderPath / "1.ppm";
+            cv::Mat image1 = cv::imread(image1Path.generic_string(), cv::IMREAD_COLOR);
+            if (image1.empty()) {
+                throw std::runtime_error("Failed to read image: " + image1Path.generic_string());
+            }
+
+            cv::Ptr<cv::Feature2D> sift = cv::SIFT::create();
+            std::vector<cv::KeyPoint> keypoints;
+            sift->detect(image1, keypoints);
+
+            // Filter keypoints that are too close to the image border
+            keypoints.erase(std::remove_if(keypoints.begin(), keypoints.end(), [image1](const cv::KeyPoint& keypoint) {
+                return keypoint.pt.x < static_cast<float>(BORDER) || keypoint.pt.y < static_cast<float>(BORDER) ||
+                       keypoint.pt.x > static_cast<float>(image1.cols - BORDER) || keypoint.pt.y > static_cast<float>(image1.rows - BORDER);
+            }), keypoints.end());
+
+            // If no keypoints are left after filtering, skip this series
+            if (keypoints.empty()) {
+                std::cerr << "All keypoints are too close to the border for folder: " << subfolderName << std::endl;
+                continue;
+            }
+
+            std::sort(keypoints.begin(), keypoints.end(), [](const cv::KeyPoint& a, const cv::KeyPoint& b) {
+                return a.response > b.response;
+            });
+
+            const int maxKeypoints = 2000;
+            if (keypoints.size() > maxKeypoints) {
+                keypoints.resize(maxKeypoints);
+            }
+
+            // Print the number of keypoints and the folder name
+            std::cout << "Number of keypoints: " << keypoints.size() << " Folder name: " << subfolderName << std::endl;
+
+            // Store keypoints for image 1 in database
+            if (!db.storeLockedKeypoints(subfolderName, "1.ppm", keypoints)) {
+                std::cerr << "Failed to store keypoints for " << subfolderName << "/1.ppm" << std::endl;
+                continue;
+            }
+
+            for (int i = 2; i <= 6; ++i) {
+                const fs::path homographyFile = subfolderPath / ("H_1_" + std::to_string(i));
+                cv::Mat homography = readHomography(homographyFile.generic_string());
+
+                std::vector<cv::Point2f> points;
+                for (const auto& keypoint : keypoints) {
+                    points.push_back(keypoint.pt);
+                }
+
+                std::vector<cv::Point2f> transformedPoints;
+                cv::perspectiveTransform(points, transformedPoints, homography);
+
+                std::vector<cv::KeyPoint> transformedKeypoints;
+                for (size_t j = 0; j < transformedPoints.size(); ++j) {
+                    const cv::KeyPoint& originalKeypoint = keypoints[j];
+                    const cv::Point2f& transformedPoint = transformedPoints[j];
+                    transformedKeypoints.emplace_back(transformedPoint, originalKeypoint.size, originalKeypoint.angle,
+                                                      originalKeypoint.response, originalKeypoint.octave, originalKeypoint.class_id);
+                }
+
+                // Filter transformed keypoints that are too close to the image border
+                transformedKeypoints.erase(std::remove_if(transformedKeypoints.begin(), transformedKeypoints.end(), [image1](const cv::KeyPoint& keypoint) {
+                    return keypoint.pt.x < static_cast<float>(BORDER) || keypoint.pt.y < static_cast<float>(BORDER) ||
+                           keypoint.pt.x > static_cast<float>(image1.cols - BORDER) || keypoint.pt.y > static_cast<float>(image1.rows - BORDER);
+                }), transformedKeypoints.end());
+
+                // If no transformed keypoints are left after filtering, skip this file
+                if (transformedKeypoints.empty()) {
+                    std::cerr << "All transformed keypoints are too close to the border for file: " << i << " in folder: " << subfolderName << std::endl;
+                    continue;
+                }
+
+                // Store transformed keypoints in database
+                std::string imageName = std::to_string(i) + ".ppm";
+                if (!db.storeLockedKeypoints(subfolderName, imageName, transformedKeypoints)) {
+                    std::cerr << "Failed to store keypoints for " << subfolderName << "/" << imageName << std::endl;
+                }
+            }
+        }
+    }
+}
+#endif
 
 /*void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderPath, const std::string& referenceKeypointsBaseFolder) {
     if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {

@@ -56,6 +56,12 @@ public:
     bool isEnabled() const;
 
     /**
+     * @brief Optimize database performance for bulk operations
+     * @return true if optimizations were applied successfully
+     */
+    bool optimizeForBulkOperations() const;
+
+    /**
      * @brief Record experiment results
      * @param results Results from descriptor comparison experiment
      * @return true if successfully recorded (or disabled), false on error
@@ -90,6 +96,20 @@ public:
      * @return true if successfully stored
      */
     bool storeLockedKeypoints(const std::string& scene_name, const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const;
+
+    /**
+     * @brief Store locked-in keypoints with boundary validation
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm") 
+     * @param keypoints Vector of OpenCV keypoints to store
+     * @param image_width Width of the target image for boundary checking
+     * @param image_height Height of the target image for boundary checking
+     * @param border_buffer Buffer distance from image edges (default 0)
+     * @return true if successfully stored
+     */
+    bool storeLockedKeypointsWithBounds(const std::string& scene_name, const std::string& image_name, 
+                                       const std::vector<cv::KeyPoint>& keypoints,
+                                       int image_width, int image_height, int border_buffer = 0) const;
 
     /**
      * @brief Retrieve locked-in keypoints for a specific scene and image

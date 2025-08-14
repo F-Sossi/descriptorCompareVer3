@@ -87,8 +87,9 @@ public:
                 response REAL NOT NULL,
                 octave INTEGER NOT NULL,
                 class_id INTEGER NOT NULL,
+                valid_bounds BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(scene_name, image_name, x, y)
+                UNIQUE(scene_name, image_name, x, y, size, angle, response, octave)
             );
         )";
 
@@ -183,6 +184,35 @@ DatabaseManager::~DatabaseManager() = default;
 
 bool DatabaseManager::isEnabled() const {
     return impl_->enabled && impl_->db != nullptr;
+}
+
+bool DatabaseManager::optimizeForBulkOperations() const {
+    if (!isEnabled()) return true; // Success if disabled
+
+    char* error_msg = nullptr;
+    
+    // SQLite performance optimizations for bulk operations
+    const char* optimizations[] = {
+        "PRAGMA journal_mode = WAL;",        // Write-Ahead Logging for better concurrency
+        "PRAGMA synchronous = NORMAL;",      // Faster than FULL, still safe
+        "PRAGMA cache_size = 10000;",        // Increase cache size (10MB)
+        "PRAGMA temp_store = MEMORY;",       // Store temp data in memory
+        "PRAGMA mmap_size = 268435456;",     // Use memory mapping (256MB)
+        "PRAGMA optimize;"                   // Optimize query planner
+    };
+
+    for (const char* pragma : optimizations) {
+        int rc = sqlite3_exec(impl_->db, pragma, nullptr, nullptr, &error_msg);
+        if (rc != SQLITE_OK) {
+            std::cerr << "Failed to apply optimization: " << pragma 
+                      << " Error: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+    }
+
+    std::cout << "Database optimized for bulk operations" << std::endl;
+    return true;
 }
 
 bool DatabaseManager::initializeTables() const {
@@ -364,10 +394,13 @@ std::map<std::string, double> DatabaseManager::getStatistics() const {
 bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const {
     if (!isEnabled()) return true; // Success if disabled
 
-    const auto sql = R"(
-        INSERT OR REPLACE INTO locked_keypoints (scene_name, image_name, x, y, size, angle, response, octave, class_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-    )";
+    if (keypoints.empty()) {
+        std::cout << "No keypoints to store for " << scene_name << "/" << image_name << std::endl;
+        return true;
+    }
+
+    // Start transaction for massive performance improvement
+    sqlite3_exec(impl_->db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
 
     // First, clear existing keypoints for this scene/image
     const auto clear_sql = "DELETE FROM locked_keypoints WHERE scene_name = ? AND image_name = ?";
@@ -380,14 +413,24 @@ bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const 
     }
     sqlite3_finalize(clear_stmt);
 
+    // Use optimized batch insert with prepared statement
+    const auto sql = R"(
+        INSERT INTO locked_keypoints (scene_name, image_name, x, y, size, angle, response, octave, class_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
     sqlite3_stmt* stmt;
     rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
         std::cerr << "Failed to prepare keypoint insert statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        sqlite3_exec(impl_->db, "ROLLBACK", nullptr, nullptr, nullptr);
         return false;
     }
 
     int stored_count = 0;
+    bool success = true;
+
+    // Batch insert all keypoints within single transaction
     for (const auto& kp : keypoints) {
         sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 2, image_name.c_str(), -1, SQLITE_STATIC);
@@ -402,14 +445,25 @@ bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const 
         rc = sqlite3_step(stmt);
         if (rc == SQLITE_DONE) {
             stored_count++;
+        } else {
+            std::cerr << "Failed to insert keypoint: " << sqlite3_errmsg(impl_->db) << std::endl;
+            success = false;
+            break;
         }
         sqlite3_reset(stmt);
     }
 
     sqlite3_finalize(stmt);
+
+    if (success) {
+        sqlite3_exec(impl_->db, "COMMIT", nullptr, nullptr, nullptr);
+        std::cout << "Stored " << stored_count << " keypoints for " << scene_name << "/" << image_name << std::endl;
+    } else {
+        sqlite3_exec(impl_->db, "ROLLBACK", nullptr, nullptr, nullptr);
+        std::cerr << "Failed to store keypoints for " << scene_name << "/" << image_name << std::endl;
+    }
     
-    std::cout << "Stored " << stored_count << " keypoints for " << scene_name << "/" << image_name << std::endl;
-    return stored_count == keypoints.size();
+    return success && (stored_count == keypoints.size());
 }
 
 std::vector<cv::KeyPoint> DatabaseManager::getLockedKeypoints(const std::string& scene_name, const std::string& image_name) const {

@@ -1,11 +1,13 @@
 #include "thesis_project/database/DatabaseManager.hpp"
 #include "../descriptor_compare/locked_in_keypoints.hpp"
+#include "../descriptor_compare/processor_utils.hpp"
 #include "thesis_project/logging.hpp"
 #include <iostream>
 #include <filesystem>
 #include <boost/filesystem.hpp>
 #include <fstream>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/opencv.hpp>
 
 namespace cv {
     class KeyPoint;
@@ -35,6 +37,11 @@ int main(int argc, char** argv) {
     if (!db.isEnabled()) {
         std::cerr << "❌ Failed to connect to database" << std::endl;
         return 1;
+    }
+    
+    // Optimize database for bulk operations
+    if (!db.optimizeForBulkOperations()) {
+        std::cerr << "⚠️  Warning: Failed to apply database optimizations" << std::endl;
     }
 
     if (command == "import-csv") {
@@ -108,63 +115,18 @@ int main(int argc, char** argv) {
         for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
             if (!fs::is_directory(scene_entry)) continue;
             std::string scene_name = scene_entry.path().filename().string();
-            return db.clearSceneKeypoints(scene_name);
+            if (!db.clearSceneKeypoints(scene_name)) {
+                LOG_ERROR("❌ Failed to clear keypoints for scene: " + scene_name);
+                return 1;
+            }
         }
         
-        // Generate fresh keypoints directly to database
-        LOG_INFO("🔍 Generating new locked keypoints...");
-        int total_generated = 0;
+        // Generate fresh keypoints using tested boundary-filtering logic
+        LOG_INFO("🔍 Generating new locked keypoints with proper boundary filtering...");
         
         try {
-            for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
-                if (!fs::is_directory(scene_entry)) continue;
-                
-                std::string scene_path = scene_entry.path().string();
-                std::string scene_name = scene_entry.path().filename().string();
-                
-                LOG_INFO("📁 Processing scene: " + scene_name);
-                
-                // Read the first image to get reference keypoints
-                cv::Mat image1 = cv::imread(scene_path + "/1.ppm", cv::IMREAD_COLOR);
-                if (image1.empty()) {
-                    LOG_ERROR("  ❌ Failed to read reference image: " + scene_path + "/1.ppm");
-                    continue;
-                }
-                
-                // Convert to grayscale for SIFT
-                cv::Mat gray;
-                cv::cvtColor(image1, gray, cv::COLOR_BGR2GRAY);
-                
-                // Generate keypoints using SIFT
-                cv::Ptr<cv::SIFT> detector = cv::SIFT::create();
-                std::vector<cv::KeyPoint> keypoints;
-                cv::Mat descriptors;
-                detector->detectAndCompute(gray, cv::noArray(), keypoints, descriptors);
-                
-                // Store keypoints for image 1.ppm
-                if (db.storeLockedKeypoints(scene_name, "1.ppm", keypoints)) {
-                    total_generated += keypoints.size();
-                    LOG_INFO("  ✅ Generated " + std::to_string(keypoints.size()) + " keypoints for " + scene_name + "/1.ppm");
-                } else {
-                    LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/1.ppm");
-                }
-                
-                // TODO: For other images, we could generate locked keypoints using homography
-                // but for now we'll just use the same keypoints (this can be enhanced later)
-                for (int i = 2; i <= 6; i++) {
-                    std::string image_name = std::to_string(i) + ".ppm";
-                    std::string image_path = scene_path + "/" + image_name;
-                    
-                    if (fs::exists(image_path)) {
-                        if (db.storeLockedKeypoints(scene_name, image_name, keypoints)) {
-                            total_generated += keypoints.size();
-                            LOG_INFO("  ✅ Stored " + std::to_string(keypoints.size()) + " keypoints for " + scene_name + "/" + image_name);
-                        }
-                    }
-                }
-            }
-            
-            LOG_INFO("🎉 Generation complete! Total keypoints generated: " + std::to_string(total_generated));
+            LockedInKeypoints::generateLockedInKeypointsToDatabase(data_folder, db);
+            LOG_INFO("🎉 Generation complete! Keypoints generated with 40px boundary filtering.");
             
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error generating keypoints: " + std::string(e.what()));

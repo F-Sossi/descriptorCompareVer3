@@ -481,7 +481,8 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
     # Check if keypoint manager exists
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
         add_executable(keypoint_manager cli/keypoint_manager.cpp
-                       descriptor_compare/locked_in_keypoints.cpp)
+                       descriptor_compare/locked_in_keypoints.cpp
+                       descriptor_compare/processor_utils.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         
@@ -504,6 +505,7 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
 
         # Link libraries
         target_link_libraries(keypoint_manager
+            keypoints
             thesis_database
             Boost::system
             Boost::filesystem
