@@ -150,3 +150,5 @@ perf.data*
 .idea/**/dynamic.xml
 .idea/**/uiDesigner.xml
 .idea/**/dbnavigator.xml
+/stages/
+/z_oldfiles/

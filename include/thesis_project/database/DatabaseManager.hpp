@@ -117,7 +117,59 @@ public:
      * @param scene_name Name of the scene to clear
      * @return true if successful
      */
-    bool clearSceneKeypoints(const std::string& scene_name);
+    bool clearSceneKeypoints(const std::string& scene_name) const;
+
+    /**
+     * @brief Store descriptors for keypoints in an experiment
+     * @param experiment_id ID of the experiment these descriptors belong to
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm")
+     * @param keypoints Vector of keypoints (for position linking)
+     * @param descriptors cv::Mat of descriptors (rows = keypoints, cols = descriptor dimension)
+     * @param processing_method String describing processing method (e.g., "SIFT-BW-None-NoNorm-NoRoot-L2")
+     * @param normalization_applied Type of normalization applied
+     * @param rooting_applied Type of rooting applied
+     * @param pooling_applied Type of pooling applied
+     * @return true if successfully stored
+     */
+    bool storeDescriptors(int experiment_id,
+                         const std::string& scene_name,
+                         const std::string& image_name,
+                         const std::vector<cv::KeyPoint>& keypoints,
+                         const cv::Mat& descriptors,
+                         const std::string& processing_method,
+                         const std::string& normalization_applied = "",
+                         const std::string& rooting_applied = "",
+                         const std::string& pooling_applied = "") const;
+
+    /**
+     * @brief Retrieve descriptors for a specific experiment and scene/image
+     * @param experiment_id ID of the experiment
+     * @param scene_name Name of the scene
+     * @param image_name Name of the image
+     * @return cv::Mat of descriptors (empty if not found or disabled)
+     */
+    cv::Mat getDescriptors(int experiment_id,
+                          const std::string& scene_name,
+                          const std::string& image_name) const;
+
+    /**
+     * @brief Retrieve descriptors with specific processing parameters
+     * @param processing_method Processing method to filter by
+     * @param normalization_applied Normalization type to filter by (optional)
+     * @param rooting_applied Rooting type to filter by (optional)
+     * @return Vector of {scene, image, descriptors} tuples
+     */
+    std::vector<std::tuple<std::string, std::string, cv::Mat>> getDescriptorsByMethod(
+        const std::string& processing_method,
+        const std::string& normalization_applied = "",
+        const std::string& rooting_applied = "") const;
+
+    /**
+     * @brief Get all unique processing methods stored in database
+     * @return Vector of processing method strings
+     */
+    std::vector<std::string> getAvailableProcessingMethods() const;
 
     /**
      * @brief Initialize database tables (safe to call multiple times)

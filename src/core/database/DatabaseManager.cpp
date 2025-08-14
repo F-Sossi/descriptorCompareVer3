@@ -5,8 +5,7 @@
 #include <chrono>
 #include <iomanip>
 
-namespace thesis_project {
-namespace database {
+namespace thesis_project::database {
 
 // PIMPL implementation to hide SQLite details
 class DatabaseManager::Impl {
@@ -42,10 +41,10 @@ public:
         }
     }
 
-    bool initializeTables() {
+    bool initializeTables() const {
         if (!enabled || !db) return !enabled; // Success if disabled
 
-        const char* create_experiments_table = R"(
+        const auto create_experiments_table = R"(
             CREATE TABLE IF NOT EXISTS experiments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 descriptor_type TEXT NOT NULL,
@@ -58,7 +57,7 @@ public:
             );
         )";
 
-        const char* create_results_table = R"(
+        const auto create_results_table = R"(
             CREATE TABLE IF NOT EXISTS results (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 experiment_id INTEGER,
@@ -76,7 +75,7 @@ public:
             );
         )";
 
-        const char* create_keypoints_table = R"(
+        const auto create_keypoints_table = R"(
             CREATE TABLE IF NOT EXISTS locked_keypoints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scene_name TEXT NOT NULL,
@@ -91,6 +90,32 @@ public:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(scene_name, image_name, x, y)
             );
+        )";
+
+        const auto create_descriptors_table = R"(
+            CREATE TABLE IF NOT EXISTS descriptors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id INTEGER NOT NULL,
+                scene_name TEXT NOT NULL,
+                image_name TEXT NOT NULL,
+                keypoint_x REAL NOT NULL,
+                keypoint_y REAL NOT NULL,
+                descriptor_vector BLOB NOT NULL,
+                descriptor_dimension INTEGER NOT NULL,
+                processing_method TEXT,
+                normalization_applied TEXT,
+                rooting_applied TEXT,
+                pooling_applied TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(experiment_id) REFERENCES experiments(id),
+                UNIQUE(experiment_id, scene_name, image_name, keypoint_x, keypoint_y)
+            );
+        )";
+
+        const auto create_descriptor_indexes = R"(
+            CREATE INDEX IF NOT EXISTS idx_descriptors_experiment ON descriptors(experiment_id, processing_method);
+            CREATE INDEX IF NOT EXISTS idx_descriptors_keypoint ON descriptors(scene_name, image_name, keypoint_x, keypoint_y);
+            CREATE INDEX IF NOT EXISTS idx_descriptors_method ON descriptors(processing_method, normalization_applied, rooting_applied);
         )";
 
         char* error_msg = nullptr;
@@ -112,6 +137,20 @@ public:
         int rc3 = sqlite3_exec(db, create_keypoints_table, nullptr, nullptr, &error_msg);
         if (rc3 != SQLITE_OK) {
             std::cerr << "Failed to create locked_keypoints table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc4 = sqlite3_exec(db, create_descriptors_table, nullptr, nullptr, &error_msg);
+        if (rc4 != SQLITE_OK) {
+            std::cerr << "Failed to create descriptors table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc5 = sqlite3_exec(db, create_descriptor_indexes, nullptr, nullptr, &error_msg);
+        if (rc5 != SQLITE_OK) {
+            std::cerr << "Failed to create descriptor indexes: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -251,7 +290,7 @@ std::vector<ExperimentResults> DatabaseManager::getRecentResults(int limit) cons
     std::vector<ExperimentResults> results;
     if (!isEnabled()) return results;
 
-    const char* sql = R"(
+    const auto sql = R"(
         SELECT r.experiment_id, e.descriptor_type, e.dataset_name,
                r.mean_average_precision, r.precision_at_1, r.precision_at_5,
                r.recall_at_1, r.recall_at_5, r.total_matches,
@@ -325,13 +364,13 @@ std::map<std::string, double> DatabaseManager::getStatistics() const {
 bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const {
     if (!isEnabled()) return true; // Success if disabled
 
-    const char* sql = R"(
+    const auto sql = R"(
         INSERT OR REPLACE INTO locked_keypoints (scene_name, image_name, x, y, size, angle, response, octave, class_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     // First, clear existing keypoints for this scene/image
-    const char* clear_sql = "DELETE FROM locked_keypoints WHERE scene_name = ? AND image_name = ?";
+    const auto clear_sql = "DELETE FROM locked_keypoints WHERE scene_name = ? AND image_name = ?";
     sqlite3_stmt* clear_stmt;
     int rc = sqlite3_prepare_v2(impl_->db, clear_sql, -1, &clear_stmt, nullptr);
     if (rc == SQLITE_OK) {
@@ -444,17 +483,17 @@ std::vector<std::string> DatabaseManager::getAvailableImages(const std::string& 
     sqlite3_bind_text(stmt, 1, scene_name.c_str(), -1, SQLITE_STATIC);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        images.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+        images.emplace_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
     }
 
     sqlite3_finalize(stmt);
     return images;
 }
 
-bool DatabaseManager::clearSceneKeypoints(const std::string& scene_name) {
+bool DatabaseManager::clearSceneKeypoints(const std::string& scene_name) const {
     if (!isEnabled()) return true; // Success if disabled
 
-    const char* sql = "DELETE FROM locked_keypoints WHERE scene_name = ?;";
+    const auto sql = "DELETE FROM locked_keypoints WHERE scene_name = ?;";
 
     sqlite3_stmt* stmt;
     int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
@@ -476,5 +515,201 @@ bool DatabaseManager::clearSceneKeypoints(const std::string& scene_name) {
     return success;
 }
 
-} // namespace database
-} // namespace thesis_project
+bool DatabaseManager::storeDescriptors(int experiment_id,
+                                      const std::string& scene_name,
+                                      const std::string& image_name,
+                                      const std::vector<cv::KeyPoint>& keypoints,
+                                      const cv::Mat& descriptors,
+                                      const std::string& processing_method,
+                                      const std::string& normalization_applied,
+                                      const std::string& rooting_applied,
+                                      const std::string& pooling_applied) const {
+    if (!impl_->enabled || !impl_->db) return !impl_->enabled;
+
+    if (keypoints.size() != descriptors.rows) {
+        std::cerr << "Error: Keypoints count (" << keypoints.size() 
+                  << ") does not match descriptor rows (" << descriptors.rows << ")" << std::endl;
+        return false;
+    }
+
+    const auto sql = R"(
+        INSERT OR REPLACE INTO descriptors 
+        (experiment_id, scene_name, image_name, keypoint_x, keypoint_y, 
+         descriptor_vector, descriptor_dimension, processing_method, 
+         normalization_applied, rooting_applied, pooling_applied) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor insert statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    // Begin transaction for efficiency
+    sqlite3_exec(impl_->db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+
+    bool success = true;
+    for (size_t i = 0; i < keypoints.size(); ++i) {
+        const cv::KeyPoint& kp = keypoints[i];
+        cv::Mat descriptor_row = descriptors.row(i);
+
+        // Bind parameters
+        sqlite3_bind_int(stmt, 1, experiment_id);
+        sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, image_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt, 4, kp.pt.x);
+        sqlite3_bind_double(stmt, 5, kp.pt.y);
+
+        // Store descriptor as binary blob
+        sqlite3_bind_blob(stmt, 6, descriptor_row.data, 
+                         descriptor_row.total() * descriptor_row.elemSize(), SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 7, descriptor_row.cols);
+        sqlite3_bind_text(stmt, 8, processing_method.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 9, normalization_applied.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 10, rooting_applied.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 11, pooling_applied.c_str(), -1, SQLITE_STATIC);
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to insert descriptor " << i << ": " << sqlite3_errmsg(impl_->db) << std::endl;
+            success = false;
+            break;
+        }
+
+        sqlite3_reset(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+
+    if (success) {
+        sqlite3_exec(impl_->db, "COMMIT", nullptr, nullptr, nullptr);
+        std::cout << "Stored " << keypoints.size() << " descriptors for " 
+                  << scene_name << "/" << image_name << " (experiment " << experiment_id << ")" << std::endl;
+    } else {
+        sqlite3_exec(impl_->db, "ROLLBACK", nullptr, nullptr, nullptr);
+    }
+
+    return success;
+}
+
+cv::Mat DatabaseManager::getDescriptors(int experiment_id,
+                                       const std::string& scene_name,
+                                       const std::string& image_name) const {
+    if (!impl_->enabled || !impl_->db) return cv::Mat();
+
+    const char* sql = R"(
+        SELECT descriptor_vector, descriptor_dimension 
+        FROM descriptors 
+        WHERE experiment_id = ? AND scene_name = ? AND image_name = ?
+        ORDER BY keypoint_x, keypoint_y
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor select statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return {};
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, image_name.c_str(), -1, SQLITE_STATIC);
+
+    std::vector<cv::Mat> descriptor_rows;
+    int descriptor_dim = 0;
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const void* blob_data = sqlite3_column_blob(stmt, 0);
+        int blob_size = sqlite3_column_bytes(stmt, 0);
+        descriptor_dim = sqlite3_column_int(stmt, 1);
+
+        // Create cv::Mat from blob data
+        cv::Mat row(1, descriptor_dim, CV_32F);
+        memcpy(row.data, blob_data, blob_size);
+        descriptor_rows.push_back(row);
+    }
+
+    sqlite3_finalize(stmt);
+
+    if (descriptor_rows.empty()) {
+        return {};
+    }
+
+    // Combine all rows into single Mat
+    cv::Mat result;
+    cv::vconcat(descriptor_rows, result);
+    return result;
+}
+
+std::vector<std::tuple<std::string, std::string, cv::Mat>> DatabaseManager::getDescriptorsByMethod(
+    const std::string& processing_method,
+    const std::string& normalization_applied,
+    const std::string& rooting_applied) const {
+    
+    std::vector<std::tuple<std::string, std::string, cv::Mat>> results;
+    if (!impl_->enabled || !impl_->db) return results;
+
+    std::string sql = "SELECT DISTINCT scene_name, image_name FROM descriptors WHERE processing_method = ?";
+    std::vector<std::string> params = {processing_method};
+
+    if (!normalization_applied.empty()) {
+        sql += " AND normalization_applied = ?";
+        params.push_back(normalization_applied);
+    }
+    if (!rooting_applied.empty()) {
+        sql += " AND rooting_applied = ?";
+        params.push_back(rooting_applied);
+    }
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor method query: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return results;
+    }
+
+    for (size_t i = 0; i < params.size(); ++i) {
+        sqlite3_bind_text(stmt, i + 1, params[i].c_str(), -1, SQLITE_STATIC);
+    }
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        std::string scene = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        std::string image = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        
+        // Get descriptors for this scene/image combination
+        cv::Mat descriptors = getDescriptors(-1, scene, image); // Use -1 to get latest
+        results.emplace_back(scene, image, descriptors);
+    }
+
+    sqlite3_finalize(stmt);
+    return results;
+}
+
+std::vector<std::string> DatabaseManager::getAvailableProcessingMethods() const {
+    std::vector<std::string> methods;
+    if (!impl_->enabled || !impl_->db) return methods;
+
+    const char* sql = "SELECT DISTINCT processing_method FROM descriptors ORDER BY processing_method";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare processing methods query: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return methods;
+    }
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const auto method = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (method) {
+            methods.emplace_back(method);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return methods;
+}
+
+} // namespace thesis_project::database
+

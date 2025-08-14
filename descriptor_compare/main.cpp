@@ -154,6 +154,9 @@ int main() {
                         dbConfig.parameters["image_type"] = imageTypeToString(options.imageType);
                         
                         int experiment_id = db.recordConfiguration(dbConfig);
+                        
+                        // Set experiment ID in config for descriptor storage
+                        config.experiment_id = experiment_id;
 #endif
                         
                         // Run the descriptor extraction process and get real metrics
@@ -189,7 +192,7 @@ int main() {
                                 results.metadata["error"] = experiment_metrics.error_message;
                             }
                             
-                            db.recordExperiment(results);
+                            return db.recordExperiment(results);
                         }
 #endif
 

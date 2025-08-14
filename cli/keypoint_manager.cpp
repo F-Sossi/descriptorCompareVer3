@@ -5,6 +5,11 @@
 #include <filesystem>
 #include <boost/filesystem.hpp>
 #include <fstream>
+#include <opencv2/core/mat.hpp>
+
+namespace cv {
+    class KeyPoint;
+}
 
 using namespace thesis_project;
 
@@ -103,7 +108,7 @@ int main(int argc, char** argv) {
         for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
             if (!fs::is_directory(scene_entry)) continue;
             std::string scene_name = scene_entry.path().filename().string();
-            db.clearSceneKeypoints(scene_name);
+            return db.clearSceneKeypoints(scene_name);
         }
         
         // Generate fresh keypoints directly to database

@@ -692,6 +692,56 @@ descriptor-compare/
 ├── reference_keypoints/       # Pre-computed keypoints (CSV)
 └── build/experiments.db       # SQLite database (auto-created)
 ```
+Current goal state
+
+``` 
+ descriptor-research/
+  ├── CMakeLists.txt                 # Build system
+  ├── setup.py                      # Dataset downloader
+  ├── docker-compose.dev.yml        # Development environment
+  │
+  ├── cli/                          # ✅ ACTIVE: Database-first CLI tools
+  │   ├── experiment_runner.cpp     # YAML experiment runner (database-tracked)
+  │   ├── keypoint_manager.cpp      # Database keypoint CRUD operations
+  │   └── analysis_runner.cpp       # Analysis pipeline
+  │
+  ├── config/                       # ✅ ACTIVE: YAML experiment configs
+  │   └── experiments/
+  │       ├── sift_baseline.yaml
+  │       ├── rgbsift_comparison.yaml
+  │       └── honc_comparison.yaml
+  │
+  ├── descriptor_compare/           # ✅ ACTIVE: Main application (database-integrated)
+  │   ├── main.cpp                  # Database-tracked experiments
+  │   ├── image_processor.cpp       # DATABASE KEYPOINT LOADING (not CSV!)
+  │   ├── experiment_config.hpp     # Legacy descriptor creation
+  │   └── processor_utils.cpp       # Legacy processing pipeline
+  │
+  ├── keypoints/                    # ✅ ACTIVE: Legacy descriptor implementations
+  │   ├── VanillaSIFT.cpp          # Working implementations
+  │   ├── RGBSIFT.cpp              # Currently used by main app
+  │   ├── HoNC.cpp                 # Working implementations
+  │   └── ...
+  │
+  ├── src/core/                     # 🚧 FUTURE: Modern architecture (Stage 8+)
+  │   ├── database/
+  │   │   └── DatabaseManager.cpp   # ✅ ACTIVE: Currently used
+  │   ├── descriptor/               # 🚧 DORMANT: Built but unused
+  │   │   ├── DescriptorFactory.cpp # Future migration target
+  │   │   └── extractors/wrappers/  # Future implementations
+  │   └── integration/
+  │       └── ProcessorBridge.cpp   # 🚧 DORMANT: Built but unused
+  │
+  ├── database/                     # ✅ ACTIVE: Database system
+  │   ├── schema.sql               # Current schema definition
+  │   └── experiments.db           # Runtime database (auto-created)
+  │
+  ├── data/                        # ✅ ACTIVE: HPatches dataset
+  ├── results/                     # ✅ ACTIVE: Experiment outputs
+  ├── reference_keypoints/         # ❌ DEPRECATED: CSV compatibility only
+  └── build/experiments.db         # ✅ ACTIVE: Main database file
+
+```
 
 ## Troubleshooting
 

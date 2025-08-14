@@ -8,9 +8,68 @@
 #include "experiment_config.hpp"
 #include "image_processor.hpp"
 #include "locked_in_keypoints.hpp"
+#ifdef BUILD_DATABASE
+#include "thesis_project/database/DatabaseManager.hpp"
+#endif
+#include "thesis_project/types.hpp"
 
 namespace fs = boost::filesystem;
 // TODO: Add another method to visual check the locked in keypoints
+
+// Helper functions for descriptive database strings (research-friendly)
+std::string descriptorTypeToDescriptiveString(DescriptorType type) {
+    switch (type) {
+        case DESCRIPTOR_SIFT: return "sift";
+        case DESCRIPTOR_vSIFT: return "vanilla_sift";
+        case DESCRIPTOR_RGBSIFT: return "rgb_sift";
+        case DESCRIPTOR_HoNC: return "histogram_of_normalized_colors";
+        case NO_DESCRIPTOR: return "no_descriptor";
+        default: return "unknown_descriptor";
+    }
+}
+
+std::string poolingStrategyToDescriptiveString(PoolingStrategy strategy) {
+    switch (strategy) {
+        case NONE: return "no_pooling";
+        case DOMAIN_SIZE_POOLING: return "domain_size_pooling";
+        case STACKING: return "stacking";
+        default: return "unknown_pooling";
+    }
+}
+
+std::string normalizationStageToDescriptiveString(NormalizationStage stage) {
+    switch (stage) {
+        case BEFORE_POOLING: return "before_pooling";
+        case AFTER_POOLING: return "after_pooling";
+        case NO_NORMALIZATION: return "no_normalization";
+        default: return "unknown_normalization";
+    }
+}
+
+std::string rootingStageToDescriptiveString(RootingStage stage) {
+    switch (stage) {
+        case R_BEFORE_POOLING: return "rooting_before_pooling";
+        case R_AFTER_POOLING: return "rooting_after_pooling";
+        case R_NONE: return "no_rooting";
+        default: return "unknown_rooting";
+    }
+}
+
+std::string descriptorColorSpaceToDescriptiveString(DescriptorColorSpace colorSpace) {
+    switch (colorSpace) {
+        case D_COLOR: return "color";
+        case D_BW: return "grayscale";
+        default: return "unknown_color_space";
+    }
+}
+
+std::string normTypeToDescriptiveString(int normType) {
+    switch (normType) {
+        case cv::NORM_L1: return "l1_norm";
+        case cv::NORM_L2: return "l2_norm";
+        default: return "unknown_norm_type";
+    }
+}
 
 cv::Scalar getKeypointColor(size_t index) {
     static const std::vector<cv::Scalar> colors = {
@@ -178,69 +237,6 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
     }
 }
 
-/*bool image_processor::process_directory(const std::string &data_folder, const std::string &results_folder,
-                                        const experiment_config &config) {
-    namespace fs = boost::filesystem;
-
-    try {
-        if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
-            std::cerr << "Invalid data folder: " << data_folder << std::endl;
-            return false;
-        }
-
-        if (!fs::exists(results_folder)) {
-            fs::create_directories(results_folder);
-        }
-
-        std::vector<std::future<void>> futures;
-
-        for (const auto &entry : fs::directory_iterator(data_folder)) {
-            const auto &path = entry.path();
-            if (fs::is_directory(path)) {
-                std::string subfolder = path.filename().string();
-                std::string results_subfolder = results_folder;
-                results_subfolder.append("/").append(subfolder);
-
-                // Asynchronous execution path using std::async
-                if (config.useMultiThreading) {
-                    auto fut = std::async(std::launch::async, [&, path, results_subfolder]() {
-                        if(config.descriptorOptions.UseLockedInKeypoints)
-                            process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
-                        else
-                            process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
-                    });
-                    futures.push_back(std::move(fut));
-                }
-                    // Synchronous (sequential) execution path
-                else {
-                    if (config.verificationType == MATCHES) {
-                        visual_verification_matches(path.string(), results_subfolder, config);
-                    } else if (config.verificationType == HOMOGRAPHY) {
-                        visual_verification_homography(path.string(), results_subfolder, config);
-                    } else {
-                        if(config.descriptorOptions.UseLockedInKeypoints)
-                            process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
-                        else
-                            process_image_folder_keypoints_unlocked(path.string(), results_subfolder, config);
-                    }
-                }
-            }
-        }
-
-        // Wait for all asynchronous tasks to complete
-        if (config.useMultiThreading) {
-            for (auto &fut : futures) {
-                fut.get(); // This blocks until the future's task is complete
-            }
-        }
-
-        return true;
-    } catch (const std::exception &e) {
-        std::cerr << "Error processing directory: " << e.what() << std::endl;
-        return false;
-    }
-}*/
-
 ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const std::string &folder, const std::string &results_folder,
                                                             const experiment_config &config) {
     ExperimentMetrics metrics;
@@ -260,12 +256,48 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
     }
 
     // Load locked-in keypoints for image 1
-    std::string keypointsFile1 = KEYPOINTS_PATH + boost::filesystem::path(folder).filename().string() + "/1ppm.csv";
-    std::vector<cv::KeyPoint> keypoints1 = LockedInKeypoints::readKeypointsFromCSV(keypointsFile1);
+    std::vector<cv::KeyPoint> keypoints1;
+    
+#ifdef BUILD_DATABASE
+    // Try loading from database first (database-first approach)
+    thesis_project::database::DatabaseManager db("experiments.db", true);
+    keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
+    
+    if (keypoints1.empty()) {
+        // Fallback to CSV if no keypoints found in database
+        std::string keypointsFile1 = KEYPOINTS_PATH + scene_name + "/1ppm.csv";
+        keypoints1 = LockedInKeypoints::readKeypointsFromCSV(keypointsFile1);
+        std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from CSV fallback for " << scene_name << "/1.ppm" << std::endl;
+    } else {
+        std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from database for " << scene_name << "/1.ppm" << std::endl;
+    }
+#else
+    // Database disabled - use CSV only
+    std::string keypointsFile1 = KEYPOINTS_PATH + scene_name + "/1ppm.csv";
+    keypoints1 = LockedInKeypoints::readKeypointsFromCSV(keypointsFile1);
+#endif
 
     // Compute descriptors for image 1 using the locked-in keypoints
     std::pair<std::vector<cv::KeyPoint>, cv::Mat> result1 = processor_utils::detectAndComputeWithConfigLocked(image1, keypoints1, config);
     cv::Mat descriptors1 = result1.second;
+
+#ifdef BUILD_DATABASE
+    // Store descriptors in database for research analysis
+    if (db.isEnabled() && !descriptors1.empty() && config.experiment_id != -1) {
+        // Build descriptive processing method string for database queries
+        std::string processing_method = descriptorTypeToDescriptiveString(config.descriptorOptions.descriptorType) + "_" +
+                                       descriptorColorSpaceToDescriptiveString(config.descriptorOptions.descriptorColorSpace) + "_" +
+                                       poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy) + "_" +
+                                       normalizationStageToDescriptiveString(config.descriptorOptions.normalizationStage) + "_" +
+                                       rootingStageToDescriptiveString(config.descriptorOptions.rootingStage);
+        
+        // Store descriptors with experiment linking and descriptive metadata
+        db.storeDescriptors(config.experiment_id, scene_name, "1.ppm", keypoints1, descriptors1, processing_method,
+                           normalizationStageToDescriptiveString(config.descriptorOptions.normalizationStage),
+                           rootingStageToDescriptiveString(config.descriptorOptions.rootingStage),
+                           poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy));
+    }
+#endif
 
     // Save keypoints and descriptors of the first image
     if(config.descriptorOptions.recordKeypoints) {
@@ -282,12 +314,48 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         if (image2.empty()) continue;
 
         // Load locked-in keypoints for image i
-        std::string keypointsFilei = KEYPOINTS_PATH + boost::filesystem::path(folder).filename().string() + "/" + std::to_string(i) + "ppm.csv";
-        std::vector<cv::KeyPoint> keypoints2 = LockedInKeypoints::readKeypointsFromCSV(keypointsFilei);
+        std::vector<cv::KeyPoint> keypoints2;
+        std::string image_name = std::to_string(i) + ".ppm";
+        
+#ifdef BUILD_DATABASE
+        // Try loading from database first (database-first approach)
+        keypoints2 = db.getLockedKeypoints(scene_name, image_name);
+        
+        if (keypoints2.empty()) {
+            // Fallback to CSV if no keypoints found in database
+            std::string keypointsFilei = KEYPOINTS_PATH + scene_name + "/" + std::to_string(i) + "ppm.csv";
+            keypoints2 = LockedInKeypoints::readKeypointsFromCSV(keypointsFilei);
+            std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from CSV fallback for " << scene_name << "/" << image_name << std::endl;
+        } else {
+            std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from database for " << scene_name << "/" << image_name << std::endl;
+        }
+#else
+        // Database disabled - use CSV only
+        std::string keypointsFilei = KEYPOINTS_PATH + scene_name + "/" + std::to_string(i) + "ppm.csv";
+        keypoints2 = LockedInKeypoints::readKeypointsFromCSV(keypointsFilei);
+#endif
 
         // Compute descriptors for image i using the locked-in keypoints
         std::pair<std::vector<cv::KeyPoint>, cv::Mat> result2 = processor_utils::detectAndComputeWithConfigLocked(image2, keypoints2, config);
         cv::Mat descriptors2 = result2.second;
+
+#ifdef BUILD_DATABASE
+        // Store descriptors in database for research analysis
+        if (db.isEnabled() && !descriptors2.empty() && config.experiment_id != -1) {
+            // Build descriptive processing method string (same as image 1)
+            std::string processing_method = descriptorTypeToDescriptiveString(config.descriptorOptions.descriptorType) + "_" +
+                                           descriptorColorSpaceToDescriptiveString(config.descriptorOptions.descriptorColorSpace) + "_" +
+                                           poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy) + "_" +
+                                           normalizationStageToDescriptiveString(config.descriptorOptions.normalizationStage) + "_" +
+                                           rootingStageToDescriptiveString(config.descriptorOptions.rootingStage);
+            
+            // Store descriptors with experiment linking and descriptive metadata
+            db.storeDescriptors(config.experiment_id, scene_name, image_name, keypoints2, descriptors2, processing_method,
+                               normalizationStageToDescriptiveString(config.descriptorOptions.normalizationStage),
+                               rootingStageToDescriptiveString(config.descriptorOptions.rootingStage),
+                               poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy));
+        }
+#endif
 
         // Save keypoints and descriptors for each image processed in the loop
         if(config.descriptorOptions.recordKeypoints) {

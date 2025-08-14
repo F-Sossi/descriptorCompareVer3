@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
                 
-                db.recordExperiment(results);
+                return db.recordExperiment(results);
             }
 #endif
 

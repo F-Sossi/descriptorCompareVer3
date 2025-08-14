@@ -111,6 +111,7 @@ public:
     cv::Ptr<cv::Feature2D> detector2; ///< Descriptor extractor
     bool useMultiThreading = true; ///< Flag to enable/disable multithreading
     double matchThreshold = 0.05; ///< Match threshold
+    int experiment_id = -1; ///< Database experiment ID for descriptor storage
 
     /**
      * @brief Constructor with descriptor options and type
