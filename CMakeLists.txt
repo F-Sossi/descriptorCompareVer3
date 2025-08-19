@@ -137,19 +137,9 @@ else()
     target_link_libraries(keypoints ${OpenCV_LIBRARIES})
 endif()
 
-# DATABASE LIBRARY (EXISTING)
-set(DATABASE_SOURCES
-    database/database_manager.cpp
-)
-
-add_library(database ${DATABASE_SOURCES})
-target_include_directories(database PUBLIC database)
-
-if(USE_CONAN)
-    target_link_libraries(database ${SQLite3_LIBS})
-else()
-    target_link_libraries(database ${SQLite3_LIBRARIES})
-endif()
+# DATABASE LIBRARY (LEGACY - REMOVED)
+# Legacy database implementation removed in favor of src/core/database/DatabaseManager.cpp
+# The modern implementation is in thesis_database library
 
 # STAGE 5: NEW DATABASE LIBRARY (THESIS PROJECT)
 if(BUILD_DATABASE AND EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseManager.cpp")
@@ -197,7 +187,6 @@ target_include_directories(descriptor_compare PRIVATE descriptor_compare)
 
 target_link_libraries(descriptor_compare
     keypoints
-    database
     Boost::system
     Boost::filesystem
 )
@@ -441,7 +430,6 @@ if(BUILD_EXPERIMENT_CLI)
         # Link libraries
         target_link_libraries(experiment_runner
             keypoints
-            database
             Boost::system
             Boost::filesystem
         )
