@@ -152,3 +152,4 @@ perf.data*
 .idea/**/dbnavigator.xml
 /stages/
 /z_oldfiles/
+/.claude/

@@ -1,13 +1,13 @@
 experiment:
-  name: "sift_baseline"
-  description: "Baseline SIFT descriptor evaluation"
+  name: "rgbsift_test"
+  description: "Test RGBSIFT descriptor by itself"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []
 
 keypoints:
   generator: "sift"
@@ -16,10 +16,13 @@ keypoints:
   edge_threshold: 10.0
 
 descriptors:
-  - name: "sift"
-    type: "sift"
+  - name: "rgbsift_only"
+    type: "rgbsift"
     pooling: "none"
-    normalize: true
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true  # RGBSIFT uses color
 
 evaluation:
   matching:
@@ -38,7 +41,7 @@ output:
   save_keypoints: false
   save_descriptors: false
   save_matches: false
-  save_visualizations: true
+  save_visualizations: false
 
 database:
   enabled: true

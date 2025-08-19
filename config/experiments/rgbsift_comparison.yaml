@@ -6,8 +6,8 @@ experiment:
 
 dataset:
   type: "hpatches"
-  path: "data/hpatches/"
-  scenes: ["i_ajuntament", "v_wall"]  # Specific scenes for quick testing
+  path: "../data/"
+  scenes: []  # Use all available scenes
 
 keypoints:
   generator: "sift"
@@ -30,14 +30,20 @@ evaluation:
     method: "brute_force"
     norm: "l2"
     cross_check: true
+    threshold: 0.8
 
   validation:
     method: "homography"
     threshold: 0.05
+    min_matches: 10
 
 output:
   results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
   save_visualizations: true
 
 database:
-  enabled: false
+  enabled: true
+  connection: "sqlite:///experiments.db"

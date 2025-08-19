@@ -1,6 +1,8 @@
 #include "processor_utils.hpp"
 #include "experiment_config.hpp"
 #include "../keypoints/VanillaSIFT.h"
+#include "src/core/pooling/PoolingFactory.hpp"
+#include "src/core/matching/MatchingFactory.hpp"
 #include <opencv2/features2d.hpp>
 #include <opencv2/core.hpp> // For cv::Ptr and core functionalities
 
@@ -18,8 +20,9 @@ double processor_utils::calculateRelativeScalingFactor(const cv::Mat& image) {
 }
 
 double processor_utils::adjustMatchThresholdForImageSet(double baseThreshold, double scaleFactor) {
-    // Adjust the threshold based on the scale factor
-    return baseThreshold * scaleFactor;
+    // Use default brute force matching strategy for threshold adjustment
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+    return matchingStrategy->adjustMatchThreshold(baseThreshold, scaleFactor);
 }
 
 cv::Mat processor_utils::applyGaussianNoise(const cv::Mat& image, double mean, double stddev) {
@@ -53,26 +56,19 @@ void processor_utils::rootDescriptors(cv::Mat& descriptors) {
     }
 }
 
-std::vector<cv::DMatch> processor_utils::matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
-    cv::BFMatcher matcher(cv::NORM_L2, true);
-    std::vector<cv::DMatch> matches;
-    matcher.match(descriptors1, descriptors2, matches);
-    return matches;
+std::vector<cv::DMatch> processor_utils::matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2, MatchingStrategy strategy) {
+    // Use the specified matching strategy
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(strategy);
+    return matchingStrategy->matchDescriptors(descriptors1, descriptors2);
 }
 
 double processor_utils::calculatePrecision(const std::vector<cv::DMatch>& matches,
                                            const std::vector<cv::KeyPoint>& keypoints2,
                                            const std::vector<cv::Point2f>& projectedPoints,
                                            double matchThreshold) {
-    int truePositives = 0;
-    for (const auto& match : matches) {
-        // Calculate the distance between the projected point and the corresponding match point in the second image
-        if (cv::norm(projectedPoints[match.queryIdx] - keypoints2[match.trainIdx].pt) <= matchThreshold) {
-            truePositives++;
-        }
-    }
-    // Calculate precision
-    return matches.empty() ? 0 : static_cast<double>(truePositives) / matches.size();
+    // Use default brute force matching strategy for precision calculation
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+    return matchingStrategy->calculatePrecision(matches, keypoints2, projectedPoints, matchThreshold);
 }
 
 void processor_utils::saveResults(const std::string& filePath, const std::vector<std::string>& headers, const std::vector<std::vector<std::string>>& dataRows) {
@@ -167,107 +163,7 @@ cv::Mat processor_utils::readHomography(const std::string& filePath) {
     return H;
 }
 
-cv::Mat processor_utils::computeDSPDescriptor(const cv::Mat& image, const std::vector<cv::KeyPoint>& keypoints, const cv::Ptr<cv::Feature2D>& featureExtractor, const experiment_config& config) {
-    cv::Mat sumOfDescriptors;
 
-    cv::Mat im = image.clone();
-
-    // Convert image to grayscale if needed
-    if (config.descriptorOptions.descriptorColorSpace == D_BW) {
-        cv::cvtColor(image, im, cv::COLOR_BGR2GRAY);
-    }
-
-    for (auto scale : config.descriptorOptions.scales) {
-        cv::Mat im_scaled;
-        cv::resize(im, im_scaled, cv::Size(), scale, scale);
-
-        cv::Mat descriptors_scaled;
-        std::vector<cv::KeyPoint> keypoints_scaled;
-        for (const auto& kp : keypoints) {
-            keypoints_scaled.emplace_back(cv::KeyPoint(kp.pt * scale, kp.size * scale));
-        }
-
-        // TODO: Need to modify VanillaSift implementation to work with updated Feature2D interface
-        // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
-        // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
-        // Features2D interface.
-        if (const cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(featureExtractor)) {
-            // featureExtractor is pointing to a VanillaSIFT object
-            vanillaSiftExtractor->compute(im_scaled, keypoints_scaled, descriptors_scaled);
-        } else {
-            // featureExtractor is pointing to a different class
-            featureExtractor->compute(im_scaled, keypoints_scaled, descriptors_scaled);
-        }
-
-        if(config.descriptorOptions.normalizationStage == BEFORE_POOLING) {
-            cv::normalize(descriptors_scaled, descriptors_scaled, 1, 0, config.descriptorOptions.normType);
-        }
-
-        if(config.descriptorOptions.rootingStage == R_BEFORE_POOLING) {
-            rootDescriptors(descriptors_scaled);
-        }
-
-        if (sumOfDescriptors.empty()) {
-            sumOfDescriptors = cv::Mat::zeros(descriptors_scaled.rows, descriptors_scaled.cols, descriptors_scaled.type());
-        }
-
-        sumOfDescriptors += descriptors_scaled;
-    }
-
-    if(config.descriptorOptions.normalizationStage == AFTER_POOLING) {
-        cv::normalize(sumOfDescriptors, sumOfDescriptors, 1, 0, config.descriptorOptions.normType);
-    }
-    return sumOfDescriptors;
-}
-
-cv::Mat processor_utils::computeStackedDescriptor(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints, const experiment_config& config) {
-    cv::Mat descriptor1;
-    cv::Mat descriptor2;
-    cv::Mat stackedDescriptor;
-    cv::Ptr<cv::Feature2D> detector1 = config.detector;
-    cv::Ptr<cv::Feature2D> detector2 = config.detector2;
-
-    // Set temp image to the correct colorspace
-    cv::Mat image1 = image.clone();
-
-    // Convert image to grayscale if needed
-    if (config.descriptorOptions.descriptorColorSpace == D_BW) {
-        cv::cvtColor(image, image1, cv::COLOR_BGR2GRAY);
-    }
-    // Compute first descriptor
-    // TODO: Need to modify VanillaSift implementation to work with updated Feature2D interface
-    // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
-    // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
-    // Features2D interface.
-    if (cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(detector1)) {
-        // featureExtractor is pointing to a VanillaSIFT object
-        vanillaSiftExtractor->compute(image1, keypoints, descriptor1);
-    } else {
-        // featureExtractor is pointing to a different class
-        detector1->compute(image1, keypoints, descriptor1);
-    }
-
-    cv::Mat image2 = image.clone();
-
-    // Convert image to grayscale if needed
-    if (config.descriptorOptions.descriptorColorSpace2 == D_BW) {
-        cv::cvtColor(image, image2, cv::COLOR_BGR2GRAY);
-    }
-
-    // Compute second descriptor with detector 2
-    if (cv::Ptr<VanillaSIFT> vanillaSiftExtractor2 = dynamic_pointer_cast<VanillaSIFT>(detector2)) {
-        // featureExtractor is pointing to a VanillaSIFT object
-        vanillaSiftExtractor2->compute(image2, keypoints, descriptor2);
-    } else {
-        // featureExtractor is pointing to a different class
-        detector2->compute(image2, keypoints, descriptor2);
-    }
-
-    // combine the two descriptors descriptor1 + descriptor2
-    cv::hconcat(descriptor1, descriptor2, stackedDescriptor);
-
-    return stackedDescriptor;
-}
 
 std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeWithConfigLocked(const cv::Mat& image, const std::vector<cv::KeyPoint>& lockedKeypoints, const experiment_config &config) {
     std::pair<std::vector<cv::KeyPoint>, cv::Mat> result;
@@ -280,43 +176,9 @@ std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeW
         result = processor_utils::detectAndCompute(config.detector, image);
     }
 
-    switch (config.descriptorOptions.poolingStrategy) {
-        case NONE: {
-
-            cv::Mat im = image.clone();
-
-            // Convert image to grayscale if needed
-            if (config.descriptorOptions.descriptorColorSpace == D_BW) {
-                cv::cvtColor(image, im, cv::COLOR_BGR2GRAY);
-            }
-            // Compute first descriptor
-            // TODO: Need to modify VanillaSift implementation to work with updated Feature2D interface
-            // Attempt to dynamically cast featureExtractor to a VanillaSIFT pointer this ia a bit of a kludge
-            // however it is due to the differences in interfaces between vanilla SIFT based descriptors and the
-            // Features2D interface.
-            if (const cv::Ptr<VanillaSIFT> vanillaSiftExtractor = dynamic_pointer_cast<VanillaSIFT>(config.detector)) {
-                // featureExtractor is pointing to a VanillaSIFT object
-                vanillaSiftExtractor->compute(im, result.first, result.second);
-            } else {
-                // featureExtractor is pointing to a different class
-                config.detector->compute(im, result.first, result.second);
-            }
-            break;
-        }
-        case DOMAIN_SIZE_POOLING: {
-            // Compute descriptors, then apply domain size pooling
-            result.second = processor_utils::computeDSPDescriptor(image, result.first, config.detector, config);
-            break;
-        }
-        case STACKING: {
-            // Compute descriptors, then apply stacking
-            result.second = processor_utils::computeStackedDescriptor(image, result.first, config);
-            break;
-        }
-        default:
-            std::cerr << "Unsupported or invalid pooling strategy: " << config.descriptorOptions.poolingStrategy << std::endl;
-            break;
-    }
+    // Use the new pooling strategy system
+    auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
+    result.second = poolingStrategy->computeDescriptors(image, result.first, config.detector, config);
 
     return result;
 }
@@ -324,28 +186,12 @@ std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeW
 std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeWithConfig(const cv::Mat& image, const experiment_config &config) {
 
     std::pair<std::vector<cv::KeyPoint>, cv::Mat> result;
-    switch (config.descriptorOptions.poolingStrategy) {
-        case NONE: {
-            // Directly detect and compute without pooling
-            result = processor_utils::detectAndCompute(config.detector, image);
-            break;
-        }
-        case DOMAIN_SIZE_POOLING: {
-            // Detect and compute, then apply domain size pooling
-            result = processor_utils::detectAndCompute(config.detector, image);
-            result.second = processor_utils::computeDSPDescriptor(image, result.first, config.detector, config);
-            break;
-        }
-        case STACKING: {
-            // Detect and compute, then apply stacking
-            result = processor_utils::detectAndCompute(config.detector, image);
-            result.second = processor_utils::computeStackedDescriptor(image, result.first, config);
-            break;
-        }
-        default:
-            std::cerr << "Unsupported or invalid pooling strategy: " << config.descriptorOptions.poolingStrategy << std::endl;
-            break;
-    }
+    // Detect keypoints first
+    result = processor_utils::detectAndCompute(config.detector, image);
+    
+    // Use the new pooling strategy system
+    auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
+    result.second = poolingStrategy->computeDescriptors(image, result.first, config.detector, config);
 
     return result;
 }

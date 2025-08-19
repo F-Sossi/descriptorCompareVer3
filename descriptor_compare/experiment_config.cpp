@@ -7,13 +7,16 @@
 #include "../keypoints/HoNC.h"
 #include "../keypoints/RGBSIFT.h"
 
-//TODO: Need to add configuration verification method
 
 experiment_config::experiment_config() {
     this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
 
     if(this->descriptorOptions.poolingStrategy == STACKING){
         this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        if(this->detector2) {
+        } else {
+            std::cout << "[ERROR] Secondary detector creation failed!" << std::endl;
+        }
     }
 
     verifyConfiguration();
@@ -190,8 +193,25 @@ cv::Ptr<cv::Feature2D> experiment_config::createDescriptorExtractor(DescriptorTy
             return HoNC::create();
         default:
             // Print error message and return SIFT as default
-            std::cerr << "Unknown descriptor type, using SIFT as default" << std::endl;
+            std::cerr << "Unknown descriptor type: " << type << ", using SIFT as default" << std::endl;
             return cv::SIFT::create();
+    }
+}
+
+void experiment_config::refreshDetectors() {
+    
+    // Recreate primary detector
+    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
+    
+    // Recreate secondary detector if stacking
+    if(this->descriptorOptions.poolingStrategy == STACKING){
+        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        if(this->detector2) {
+        } else {
+            std::cout << "[ERROR] Secondary detector recreation failed!" << std::endl;
+        }
+    } else {
+        this->detector2.reset();  // Clear any existing detector2
     }
 }
 

@@ -36,6 +36,15 @@ enum RootingStage {
 };
 
 /**
+ * @brief Enum for matching strategies
+ */
+enum MatchingStrategy {
+    BRUTE_FORCE, ///< Brute-force matching with cross-check
+    FLANN,       ///< FLANN-based approximate matching (future)
+    RATIO_TEST   ///< Lowe's ratio test (future)
+};
+
+/**
  * @brief Enum for descriptor types that can be used in the experiments
  * they should be added here and in the create DescriptorExtractor method
  * this will allow you to create the pointer with whatever options needed
@@ -111,6 +120,7 @@ public:
     cv::Ptr<cv::Feature2D> detector2; ///< Descriptor extractor
     bool useMultiThreading = true; ///< Flag to enable/disable multithreading
     double matchThreshold = 0.05; ///< Match threshold
+    MatchingStrategy matchingStrategy = BRUTE_FORCE; ///< Matching strategy
     int experiment_id = -1; ///< Database experiment ID for descriptor storage
 
     /**
@@ -199,6 +209,9 @@ public:
      * @return Descriptor extractor
      */
     static cv::Ptr<cv::Feature2D> createDescriptorExtractor(DescriptorType type) ;
+    
+    // Method to refresh detectors after configuration changes
+    void refreshDetectors();
 
     void verifyConfiguration();
 

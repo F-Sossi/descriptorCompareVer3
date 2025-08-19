@@ -1,13 +1,13 @@
 experiment:
-  name: "sift_baseline"
-  description: "Baseline SIFT descriptor evaluation"
+  name: "sift_single_test"
+  description: "Single SIFT test - no normalization"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []
 
 keypoints:
   generator: "sift"
@@ -16,10 +16,13 @@ keypoints:
   edge_threshold: 10.0
 
 descriptors:
-  - name: "sift"
+  - name: "sift_no_norm"
     type: "sift"
     pooling: "none"
-    normalize: true
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
 
 evaluation:
   matching:
@@ -38,7 +41,7 @@ output:
   save_keypoints: false
   save_descriptors: false
   save_matches: false
-  save_visualizations: true
+  save_visualizations: false
 
 database:
   enabled: true

@@ -59,8 +59,11 @@ int main(int argc, char** argv) {
 
             // Convert to old configuration format for existing image processor
             auto old_config = config::ConfigurationBridge::createOldConfigForDescriptor(yaml_config, i);
+            
+            // Refresh detectors after configuration bridge updates
+            old_config.refreshDetectors();
 
-            // Create descriptor-specific results directory
+            // Create descriptor-specific results directory TODO: Dont make this folder if DB active
             std::string results_path = results_base + "/" + desc_config.name;
             std::filesystem::create_directories(results_path);
 
@@ -109,7 +112,7 @@ int main(int argc, char** argv) {
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
                 
-                return db.recordExperiment(results);
+                db.recordExperiment(results);
             }
 #endif
 

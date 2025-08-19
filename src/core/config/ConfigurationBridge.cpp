@@ -1,8 +1,7 @@
 #include "ConfigurationBridge.hpp"
 #include "thesis_project/types.hpp"
 
-namespace thesis_project {
-namespace config {
+namespace thesis_project::config {
 
     ::experiment_config ConfigurationBridge::toOldConfig(const ExperimentConfig& new_config) {
         ::experiment_config old_config;
@@ -15,7 +14,8 @@ namespace config {
             old_config.descriptorOptions.descriptorType = static_cast<::DescriptorType>(toOldDescriptorType(desc_config.type));
             
             // Map pooling strategy
-            old_config.descriptorOptions.poolingStrategy = static_cast<::PoolingStrategy>(toOldPoolingStrategy(desc_config.params.pooling));
+            auto pooling_strategy = static_cast<::PoolingStrategy>(toOldPoolingStrategy(desc_config.params.pooling));
+            old_config.descriptorOptions.poolingStrategy = pooling_strategy;
             
             // Map normalization settings
             if (desc_config.params.normalize_after_pooling) {
@@ -30,16 +30,35 @@ namespace config {
             old_config.descriptorOptions.normType = desc_config.params.norm_type;
             old_config.descriptorOptions.scales = desc_config.params.scales;
             
-            // Color/BW image type
+            // Color/BW image type and descriptor color space
             if (desc_config.params.use_color) {
                 old_config.descriptorOptions.imageType = ::COLOR;
+                old_config.descriptorOptions.descriptorColorSpace = ::D_COLOR;
             } else {
                 old_config.descriptorOptions.imageType = ::BW;
+                old_config.descriptorOptions.descriptorColorSpace = ::D_BW;
             }
             
             // Stacking parameters
             if (desc_config.params.pooling == PoolingStrategy::STACKING) {
+                // Set secondary descriptor type
                 old_config.descriptorOptions.descriptorType2 = static_cast<::DescriptorType>(toOldDescriptorType(desc_config.params.secondary_descriptor));
+                
+                // Set appropriate color space for secondary descriptor based on its type
+                switch (desc_config.params.secondary_descriptor) {
+                    case DescriptorType::SIFT:
+                    case DescriptorType::vSIFT:
+                        old_config.descriptorOptions.descriptorColorSpace2 = ::D_BW;
+                        break;
+                    case DescriptorType::RGBSIFT:
+                    case DescriptorType::HoNC:
+                        old_config.descriptorOptions.descriptorColorSpace2 = ::D_COLOR;
+                        break;
+                    default:
+                        old_config.descriptorOptions.descriptorColorSpace2 = ::D_BW;
+                        break;
+                }
+            } else {
             }
             
             // Locked keypoints
@@ -151,5 +170,4 @@ namespace config {
         return toOldConfig(temp_config);
     }
 
-} // namespace config
-} // namespace thesis_project
+} // namespace thesis_project::config

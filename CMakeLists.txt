@@ -184,6 +184,12 @@ set(DESCRIPTOR_COMPARE_SOURCES
     descriptor_compare/image_processor.cpp
     descriptor_compare/processor_utils.cpp
     descriptor_compare/locked_in_keypoints.cpp
+    src/core/pooling/NoPooling.cpp
+    src/core/pooling/DomainSizePooling.cpp
+    src/core/pooling/StackingPooling.cpp
+    src/core/pooling/PoolingFactory.cpp
+    src/core/matching/BruteForceMatching.cpp
+    src/core/matching/MatchingFactory.cpp
 )
 
 add_executable(descriptor_compare ${DESCRIPTOR_COMPARE_SOURCES})
@@ -403,6 +409,12 @@ if(BUILD_EXPERIMENT_CLI)
         add_executable(experiment_runner cli/experiment_runner.cpp
                        src/core/config/YAMLConfigLoader.cpp
                        src/core/config/ConfigurationBridge.cpp
+                       src/core/pooling/NoPooling.cpp
+                       src/core/pooling/DomainSizePooling.cpp
+                       src/core/pooling/StackingPooling.cpp
+                       src/core/pooling/PoolingFactory.cpp
+                       src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/MatchingFactory.cpp
                        descriptor_compare/experiment_config.cpp
                        descriptor_compare/image_processor.cpp
                        descriptor_compare/processor_utils.cpp
@@ -482,7 +494,13 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
         add_executable(keypoint_manager cli/keypoint_manager.cpp
                        descriptor_compare/locked_in_keypoints.cpp
-                       descriptor_compare/processor_utils.cpp)
+                       descriptor_compare/processor_utils.cpp
+                       src/core/pooling/NoPooling.cpp
+                       src/core/pooling/DomainSizePooling.cpp
+                       src/core/pooling/StackingPooling.cpp
+                       src/core/pooling/PoolingFactory.cpp
+                       src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/MatchingFactory.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         

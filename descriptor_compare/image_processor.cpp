@@ -12,6 +12,7 @@
 #include "thesis_project/database/DatabaseManager.hpp"
 #endif
 #include "thesis_project/types.hpp"
+#include "src/core/pooling/PoolingFactory.hpp"
 
 namespace fs = boost::filesystem;
 // TODO: Add another method to visual check the locked in keypoints
@@ -259,22 +260,18 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
     std::vector<cv::KeyPoint> keypoints1;
     
 #ifdef BUILD_DATABASE
-    // Try loading from database first (database-first approach)
+    // Load keypoints from database only (no CSV fallback)
     thesis_project::database::DatabaseManager db("experiments.db", true);
     keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
     
     if (keypoints1.empty()) {
-        // Fallback to CSV if no keypoints found in database
-        std::string keypointsFile1 = KEYPOINTS_PATH + scene_name + "/1ppm.csv";
-        keypoints1 = LockedInKeypoints::readKeypointsFromCSV(keypointsFile1);
-        std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from CSV fallback for " << scene_name << "/1.ppm" << std::endl;
-    } else {
-        std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from database for " << scene_name << "/1.ppm" << std::endl;
+        std::cerr << "[ERROR] No keypoints found in database for " << scene_name << "/1.ppm. Use keypoint_manager to generate keypoints first." << std::endl;
+        return ExperimentMetrics(); // Return empty metrics
     }
+    std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from database for " << scene_name << "/1.ppm" << std::endl;
 #else
-    // Database disabled - use CSV only
-    std::string keypointsFile1 = KEYPOINTS_PATH + scene_name + "/1ppm.csv";
-    keypoints1 = LockedInKeypoints::readKeypointsFromCSV(keypointsFile1);
+    std::cerr << "[ERROR] Database support not enabled. Build with -DBUILD_DATABASE=ON" << std::endl;
+    return ExperimentMetrics(); // Return empty metrics
 #endif
 
     // Compute descriptors for image 1 using the locked-in keypoints
@@ -318,21 +315,17 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         std::string image_name = std::to_string(i) + ".ppm";
         
 #ifdef BUILD_DATABASE
-        // Try loading from database first (database-first approach)
+        // Load keypoints from database only (no CSV fallback)
         keypoints2 = db.getLockedKeypoints(scene_name, image_name);
         
         if (keypoints2.empty()) {
-            // Fallback to CSV if no keypoints found in database
-            std::string keypointsFilei = KEYPOINTS_PATH + scene_name + "/" + std::to_string(i) + "ppm.csv";
-            keypoints2 = LockedInKeypoints::readKeypointsFromCSV(keypointsFilei);
-            std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from CSV fallback for " << scene_name << "/" << image_name << std::endl;
-        } else {
-            std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from database for " << scene_name << "/" << image_name << std::endl;
+            std::cerr << "[ERROR] No keypoints found in database for " << scene_name << "/" << image_name << ". Use keypoint_manager to generate keypoints first." << std::endl;
+            continue; // Skip this image
         }
+        std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from database for " << scene_name << "/" << image_name << std::endl;
 #else
-        // Database disabled - use CSV only
-        std::string keypointsFilei = KEYPOINTS_PATH + scene_name + "/" + std::to_string(i) + "ppm.csv";
-        keypoints2 = LockedInKeypoints::readKeypointsFromCSV(keypointsFilei);
+        std::cerr << "[ERROR] Database support not enabled. Build with -DBUILD_DATABASE=ON" << std::endl;
+        return ExperimentMetrics(); // Return empty metrics
 #endif
 
         // Compute descriptors for image i using the locked-in keypoints
@@ -366,7 +359,7 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         }
 
         // Match descriptors
-        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2);
+        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
 
         /*
          * Geometric evaluation for homography-transformed keypoints:
@@ -421,7 +414,6 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
     // Read in 1.ppm as the base image
     cv::Mat image1 = cv::imread(folder + "/1.ppm", cv::IMREAD_COLOR);
 
-    // TODO: This needs to be moved to the processor utils as they are processed differently
     if (config.descriptorOptions.descriptorColorSpace == D_BW) {
         // convert image1 to greyscale
         cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
@@ -460,7 +452,7 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
         }
 
         // Match normal descriptors
-        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2);
+        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
         std::sort(matches.begin(), matches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
             return a.distance < b.distance;
         });
@@ -514,8 +506,9 @@ void image_processor::visual_verification_matches(const std::string &folder, con
     std::vector<cv::KeyPoint> keypoints1 = result1.first;
     cv::Mat descriptors1 = result1.second;
 
-    // Compute DSP descriptors for image 1
-    cv::Mat dspDescriptors1 = processor_utils::computeDSPDescriptor(image1, keypoints1, config.detector, config);
+    // Compute DSP descriptors for image 1 using factory system
+    auto dspPoolingStrategy = thesis_project::pooling::PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
+    cv::Mat dspDescriptors1 = dspPoolingStrategy->computeDescriptors(image1, keypoints1, config.detector, config);
 
     for (int i = 2; i <= 6; i++) {
         std::string imagePath = folder + "/" + std::to_string(i) + ".ppm";
@@ -531,18 +524,18 @@ void image_processor::visual_verification_matches(const std::string &folder, con
         std::vector<cv::KeyPoint>keypoints2 = result2.first;
         cv::Mat descriptors2 = result2.second;
 
-        // Compute DSP descriptors for image 2
-        cv::Mat dspDescriptors2 = processor_utils::computeDSPDescriptor(image2, keypoints2, config.detector, config);
+        // Compute DSP descriptors for image 2 using factory system
+        cv::Mat dspDescriptors2 = dspPoolingStrategy->computeDescriptors(image2, keypoints2, config.detector, config);
 
         // Match normal descriptors
-        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2);
+        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
         std::sort(matches.begin(), matches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
             return a.distance < b.distance;
         });
         std::vector<cv::DMatch> topMatches = std::vector<cv::DMatch>(matches.begin(), matches.begin() + std::min(100, (int)matches.size()));
 
         // Match DSP descriptors
-        std::vector<cv::DMatch> dspMatches = processor_utils::matchDescriptors(dspDescriptors1, dspDescriptors2);
+        std::vector<cv::DMatch> dspMatches = processor_utils::matchDescriptors(dspDescriptors1, dspDescriptors2, config.matchingStrategy);
         std::sort(dspMatches.begin(), dspMatches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
             return a.distance < b.distance;
         });

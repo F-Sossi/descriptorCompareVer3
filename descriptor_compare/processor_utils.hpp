@@ -22,7 +22,7 @@ public:
 
     static void rootDescriptors(cv::Mat& descriptors);
 
-    static std::vector<cv::DMatch> matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2) ;
+    static std::vector<cv::DMatch> matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2, MatchingStrategy strategy = BRUTE_FORCE);
 
     static void saveResults(const std::string& filePath, const std::vector<std::string>& headers,
                             const std::vector<std::vector<std::string>>& dataRows);
@@ -34,8 +34,6 @@ public:
     static cv::Mat readHomography(const std::string& filePath);
 
 
-    static cv::Mat computeDSPDescriptor(const cv::Mat &image, const std::vector<cv::KeyPoint> &keypoints,
-                                 const cv::Ptr<cv::Feature2D> &featureExtractor, const experiment_config &config);
 
     static std::pair<std::vector<cv::KeyPoint>, cv::Mat>
     detectAndComputeWithConfig(const cv::Mat &image, const experiment_config &config);
@@ -47,8 +45,6 @@ public:
     static double calculatePrecision(const std::vector<cv::DMatch> &matches, const std::vector<cv::KeyPoint> &keypoints2,
                               const std::vector<cv::Point2f> &projectedPoints, double matchThreshold);
 
-    static cv::Mat computeStackedDescriptor(const cv::Mat &image, std::vector<cv::KeyPoint> &keypoints,
-                                     const experiment_config &config);
 
     static std::pair<std::vector<cv::KeyPoint>, cv::Mat>
     detectAndComputeWithConfigLocked(const cv::Mat &image, const std::vector<cv::KeyPoint> &lockedKeypoints,

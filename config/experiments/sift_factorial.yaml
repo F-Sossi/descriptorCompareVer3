@@ -1,0 +1,188 @@
+experiment:
+  name: "sift_factorial"
+  description: "Factorial experiment testing pooling and normalization effects on SIFT descriptor (grayscale)"
+  version: "1.0"
+  author: "researcher"
+  note: "Tests 3 pooling × 3 normalization × 2 norm_types = 18 combinations"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+
+descriptors:
+  # None pooling with different normalizations
+  - name: "sift_none_none_l2"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_none_before_l2"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_none_after_l2"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_none_none_l1"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_none_before_l1"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_none_after_l1"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+
+  # Domain Size Pooling with different normalizations
+  - name: "sift_dsp_none_l2"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_dsp_before_l2"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_dsp_after_l2"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_dsp_none_l1"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_dsp_before_l1"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_dsp_after_l1"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+
+  # Stacking with different normalizations  
+  - name: "sift_stack_none_l2"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_stack_before_l2"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_stack_after_l2"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "sift_stack_none_l1"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: false
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_stack_before_l1"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: true
+    normalize_after_pooling: false
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_stack_after_l1"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false  # Disable for factorial experiments
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
