@@ -35,9 +35,14 @@ private:
     static void saveKeypointsToCSV(const std::string& filePath, const std::vector<cv::KeyPoint>& keypoints);
     static cv::Mat readHomography(const std::string& filePath);
     static void createSummaryImage(const std::vector<std::string>& imageFilenames,
-                                   const fs::path& referenceKeypointsFolder,
-                                   const std::string& outputPath,
-                                   const std::string& sceneName);
+                                   const std::string& sceneName,
+                                   const std::string& outputPath);
+#ifdef BUILD_DATABASE
+    static void createSummaryImageWithDatabase(const std::vector<std::string>& imageFilenames,
+                                              const std::string& sceneName,
+                                              const std::string& outputPath,
+                                              const thesis_project::database::DatabaseManager& db);
+#endif
 };
 
 #endif // LOCKED_IN_KEYPOINTS_HPP

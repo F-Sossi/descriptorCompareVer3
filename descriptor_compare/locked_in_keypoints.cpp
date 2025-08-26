@@ -303,11 +303,18 @@ void LockedInKeypoints::displayLockedInKeypoints(const std::string& dataFolderPa
         throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
     }
 
+#ifdef BUILD_DATABASE
+    // Initialize database for keypoint loading
+    thesis_project::database::DatabaseConfig db_config;
+    db_config.connection_string = "experiments.db";
+    db_config.enabled = true;
+    thesis_project::database::DatabaseManager db(db_config);
+#endif
+
     for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
         const fs::path subfolderPath = entry.path();
         if (fs::is_directory(subfolderPath)) {
             const std::string subfolderName = subfolderPath.filename().generic_string();
-            const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
 
             // Create a vector to store the image filenames
             std::vector<std::string> imageFilenames;
@@ -329,8 +336,21 @@ void LockedInKeypoints::displayLockedInKeypoints(const std::string& dataFolderPa
                     continue;
                 }
 
+#ifdef BUILD_DATABASE
+                // Load keypoints from database instead of CSV
+                std::string imageName = std::to_string(i + 1) + ".ppm";
+                std::vector<cv::KeyPoint> keypoints = db.getLockedKeypoints(subfolderName, imageName);
+                
+                if (keypoints.empty()) {
+                    std::cerr << "No keypoints found in database for " << subfolderName << "/" << imageName << std::endl;
+                    continue;
+                }
+#else
+                // Fallback to CSV if database not available
+                const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
                 fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
                 std::vector<cv::KeyPoint> keypoints = readKeypointsFromCSV(keypointsFilename.generic_string());
+#endif
 
                 imagesWithKeypoints.emplace_back(image, keypoints);
             }
@@ -364,11 +384,18 @@ void LockedInKeypoints::displayLockedInKeypointsBorder(const std::string& dataFo
         throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
     }
 
+#ifdef BUILD_DATABASE
+    // Initialize database for keypoint loading
+    thesis_project::database::DatabaseConfig db_config;
+    db_config.connection_string = "experiments.db";
+    db_config.enabled = true;
+    thesis_project::database::DatabaseManager db(db_config);
+#endif
+
     for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
         const fs::path subfolderPath = entry.path();
         if (fs::is_directory(subfolderPath)) {
             const std::string subfolderName = subfolderPath.filename().generic_string();
-            const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
 
             // Create a vector to store the image filenames
             std::vector<std::string> imageFilenames;
@@ -390,8 +417,21 @@ void LockedInKeypoints::displayLockedInKeypointsBorder(const std::string& dataFo
                     continue;
                 }
 
+#ifdef BUILD_DATABASE
+                // Load keypoints from database instead of CSV
+                std::string imageName = std::to_string(i + 1) + ".ppm";
+                std::vector<cv::KeyPoint> keypoints = db.getLockedKeypoints(subfolderName, imageName);
+                
+                if (keypoints.empty()) {
+                    std::cerr << "No keypoints found in database for " << subfolderName << "/" << imageName << std::endl;
+                    continue;
+                }
+#else
+                // Fallback to CSV if database not available
+                const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
                 fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
                 std::vector<cv::KeyPoint> keypoints = readKeypointsFromCSV(keypointsFilename.generic_string());
+#endif
 
                 imagesWithKeypoints.emplace_back(image, keypoints);
             }
@@ -472,6 +512,14 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
         throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
     }
 
+#ifdef BUILD_DATABASE
+    // Initialize database for keypoint loading
+    thesis_project::database::DatabaseConfig db_config;
+    db_config.connection_string = "experiments.db";
+    db_config.enabled = true;
+    thesis_project::database::DatabaseManager db(db_config);
+#endif
+
     // Create output directory for saved images
     std::string outputPath = "keypoint_visualizations/";
     fs::create_directories(outputPath);
@@ -481,13 +529,22 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
         const fs::path subfolderPath = entry.path();
         if (fs::is_directory(subfolderPath)) {
             const std::string subfolderName = subfolderPath.filename().generic_string();
-            const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
 
-            // Skip if no keypoints exist for this folder
+#ifdef BUILD_DATABASE
+            // Check if keypoints exist in database
+            auto availableImages = db.getAvailableImages(subfolderName);
+            if (availableImages.empty()) {
+                std::cerr << "No keypoints found in database for: " << subfolderName << std::endl;
+                continue;
+            }
+#else
+            // Fallback to CSV path check if database not available
+            const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
             if (!fs::exists(referenceKeypointsFolder)) {
                 std::cerr << "No keypoints found for: " << subfolderName << std::endl;
                 continue;
             }
+#endif
 
             // Create subfolder for this image set
             std::string setOutputPath = outputPath + subfolderName + "/";
@@ -511,6 +568,18 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
                     continue;
                 }
 
+#ifdef BUILD_DATABASE
+                // Load keypoints from database
+                std::string imageName = std::to_string(i + 1) + ".ppm";
+                std::vector<cv::KeyPoint> keypoints = db.getLockedKeypoints(subfolderName, imageName);
+                
+                if (keypoints.empty()) {
+                    std::cerr << "No keypoints found in database for " << subfolderName << "/" << imageName << std::endl;
+                    continue;
+                }
+#else
+                // Fallback to CSV if database not available
+                const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / subfolderName;
                 fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
 
                 // Check if keypoints file exists
@@ -520,6 +589,7 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
                 }
 
                 std::vector<cv::KeyPoint> keypoints = readKeypointsFromCSV(keypointsFilename.generic_string());
+#endif
 
                 cv::Mat imageWithKeypointsDisplay = image.clone();
 
@@ -552,7 +622,11 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
             }
 
             // Create a summary image showing all 6 images in a grid
-            createSummaryImage(imageFilenames, referenceKeypointsFolder, setOutputPath, subfolderName);
+#ifdef BUILD_DATABASE
+            createSummaryImageWithDatabase(imageFilenames, subfolderName, setOutputPath, db);
+#else
+            createSummaryImage(imageFilenames, subfolderName, setOutputPath);
+#endif
         }
     }
 
@@ -563,9 +637,10 @@ void LockedInKeypoints::saveLockedInKeypointsBorder(const std::string& dataFolde
 
 // Add this helper function for creating the summary image
 void LockedInKeypoints::createSummaryImage(const std::vector<std::string>& imageFilenames,
-                                           const fs::path& referenceKeypointsFolder,
-                                           const std::string& outputPath,
-                                           const std::string& sceneName) {
+                                           const std::string& sceneName,
+                                           const std::string& outputPath) {
+    // CSV fallback implementation - legacy support
+    const fs::path referenceKeypointsFolder = fs::path(KEYPOINTS_PATH) / sceneName;
     // Create a 2x3 grid for 6 images
     int gridCols = 3;
     int gridRows = 2;
@@ -582,7 +657,7 @@ void LockedInKeypoints::createSummaryImage(const std::vector<std::string>& image
         cv::Mat image = cv::imread(imageFilenames[i], cv::IMREAD_COLOR);
         if (image.empty()) continue;
 
-        // Load keypoints
+        // Load keypoints from CSV (fallback)
         fs::path keypointsFilename = referenceKeypointsFolder / (std::to_string(i + 1) + "ppm.csv");
         if (!fs::exists(keypointsFilename)) continue;
 
@@ -592,15 +667,6 @@ void LockedInKeypoints::createSummaryImage(const std::vector<std::string>& image
         cv::Mat imageWithKeypoints;
         cv::drawKeypoints(image, keypoints, imageWithKeypoints,
                          cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-        // Draw 65x65 squares on a few sample keypoints (first 5)
-        for (size_t k = 0; k < keypoints.size() && k < 5; k++) {
-            cv::Point2f pt = keypoints[k].pt;
-            cv::rectangle(imageWithKeypoints,
-                         cv::Point(pt.x - 32.5, pt.y - 32.5),
-                         cv::Point(pt.x + 32.5, pt.y + 32.5),
-                         cv::Scalar(0, 255, 0), 2);
-        }
 
         // Resize to thumbnail
         cv::Mat thumbnail;
@@ -631,3 +697,66 @@ void LockedInKeypoints::createSummaryImage(const std::vector<std::string>& image
     cv::imwrite(summaryFilename, summary);
     std::cout << "  Saved: summary_all_images.jpg" << std::endl;
 }
+
+#ifdef BUILD_DATABASE
+// Database-enabled version of createSummaryImage
+void LockedInKeypoints::createSummaryImageWithDatabase(const std::vector<std::string>& imageFilenames,
+                                                      const std::string& sceneName,
+                                                      const std::string& outputPath,
+                                                      const thesis_project::database::DatabaseManager& db) {
+    // Create a 2x3 grid for 6 images
+    int gridCols = 3;
+    int gridRows = 2;
+    int thumbWidth = 400;
+    int thumbHeight = 300;
+    int borderSize = 5;
+
+    // Create white background with borders
+    cv::Mat summary((thumbHeight + borderSize) * gridRows + borderSize,
+                    (thumbWidth + borderSize) * gridCols + borderSize,
+                    CV_8UC3, cv::Scalar(255, 255, 255));
+
+    for (size_t i = 0; i < imageFilenames.size() && i < 6; i++) {
+        cv::Mat image = cv::imread(imageFilenames[i], cv::IMREAD_COLOR);
+        if (image.empty()) continue;
+
+        // Load keypoints from database
+        std::string imageName = std::to_string(i + 1) + ".ppm";
+        std::vector<cv::KeyPoint> keypoints = db.getLockedKeypoints(sceneName, imageName);
+        if (keypoints.empty()) continue;
+
+        // Draw keypoints on image
+        cv::Mat imageWithKeypoints;
+        cv::drawKeypoints(image, keypoints, imageWithKeypoints,
+                         cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+        // Resize to thumbnail
+        cv::Mat thumbnail;
+        cv::resize(imageWithKeypoints, thumbnail, cv::Size(thumbWidth, thumbHeight));
+
+        // Add image number and keypoint count
+        std::string text = "Image " + std::to_string(i + 1) + " (" + std::to_string(keypoints.size()) + " kpts)";
+        cv::putText(thumbnail, text, cv::Point(10, 25),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+
+        // Calculate position in grid with borders
+        int row = i / gridCols;
+        int col = i % gridCols;
+        int x = col * (thumbWidth + borderSize) + borderSize;
+        int y = row * (thumbHeight + borderSize) + borderSize;
+
+        // Copy thumbnail to summary at calculated position
+        cv::Rect roi(x, y, thumbWidth, thumbHeight);
+        thumbnail.copyTo(summary(roi));
+    }
+
+    // Add title to the summary
+    cv::putText(summary, "Scene: " + sceneName + " (DB)", cv::Point(20, 30),
+               cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 0), 2);
+
+    // Save summary
+    std::string summaryFilename = outputPath + "summary_all_images.jpg";
+    cv::imwrite(summaryFilename, summary);
+    std::cout << "  Saved: summary_all_images.jpg (from database)" << std::endl;
+}
+#endif
