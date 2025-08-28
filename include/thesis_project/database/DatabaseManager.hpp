@@ -140,6 +140,52 @@ public:
     bool clearSceneKeypoints(const std::string& scene_name) const;
 
     /**
+     * @brief Create a new keypoint set with metadata
+     * @param name Unique name for this keypoint set
+     * @param generator_type Type of keypoint generator (e.g., "SIFT", "ORB") 
+     * @param generation_method Method used ("homography_projection" or "independent_detection")
+     * @param max_features Maximum features per image (0 for unlimited)
+     * @param dataset_path Path to dataset used
+     * @param description Human-readable description
+     * @param boundary_filter_px Boundary filter applied in pixels
+     * @return keypoint_set_id if successful, -1 on error
+     */
+    int createKeypointSet(const std::string& name,
+                         const std::string& generator_type,
+                         const std::string& generation_method,
+                         int max_features = 2000,
+                         const std::string& dataset_path = "",
+                         const std::string& description = "",
+                         int boundary_filter_px = 40) const;
+
+    /**
+     * @brief Store locked-in keypoints for a specific keypoint set
+     * @param keypoint_set_id ID of the keypoint set
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm")
+     * @param keypoints Vector of OpenCV keypoints to store
+     * @return true if successfully stored
+     */
+    bool storeLockedKeypointsForSet(int keypoint_set_id, const std::string& scene_name, 
+                                   const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const;
+
+    /**
+     * @brief Retrieve locked-in keypoints from a specific keypoint set
+     * @param keypoint_set_id ID of the keypoint set
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param image_name Name of the image (e.g., "1.ppm")
+     * @return Vector of OpenCV keypoints (empty if not found or disabled)
+     */
+    std::vector<cv::KeyPoint> getLockedKeypointsFromSet(int keypoint_set_id, const std::string& scene_name, 
+                                                       const std::string& image_name) const;
+
+    /**
+     * @brief Get all available keypoint sets
+     * @return Vector of {id, name, generation_method} tuples
+     */
+    std::vector<std::tuple<int, std::string, std::string>> getAvailableKeypointSets() const;
+
+    /**
      * @brief Store descriptors for keypoints in an experiment
      * @param experiment_id ID of the experiment these descriptors belong to
      * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")

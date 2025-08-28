@@ -104,6 +104,12 @@ namespace config {
         if (node["use_locked_keypoints"]) {
             keypoints.params.use_locked_keypoints = node["use_locked_keypoints"].as<bool>();
         }
+        if (node["source"]) {
+            keypoints.params.source = keypointSourceFromString(node["source"].as<std::string>());
+        }
+        if (node["keypoint_set_name"]) {
+            keypoints.params.keypoint_set_name = node["keypoint_set_name"].as<std::string>();
+        }
         if (node["locked_keypoints_path"]) {
             keypoints.params.locked_keypoints_path = node["locked_keypoints_path"].as<std::string>();
         }

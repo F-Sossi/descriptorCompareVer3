@@ -8,6 +8,7 @@
 #endif
 #include <iostream>
 #include <filesystem>
+#include <numeric>
 #include <chrono>
 
 using namespace thesis_project;
@@ -47,9 +48,8 @@ int main(int argc, char** argv) {
         LOG_INFO("Dataset: " + yaml_config.dataset.path);
         LOG_INFO("Descriptors: " + std::to_string(yaml_config.descriptors.size()));
 
-        // Create results directory
+        // Results directory creation removed - using database storage only
         std::string results_base = yaml_config.output.results_path + yaml_config.experiment.name;
-        std::filesystem::create_directories(results_base);
 
         // Run experiment for each descriptor configuration
         for (size_t i = 0; i < yaml_config.descriptors.size(); ++i) {
@@ -63,9 +63,8 @@ int main(int argc, char** argv) {
             // Refresh detectors after configuration bridge updates
             old_config.refreshDetectors();
 
-            // Create descriptor-specific results directory TODO: Dont make this folder if DB active
+            // Descriptor-specific directory creation removed - using database storage only
             std::string results_path = results_base + "/" + desc_config.name;
-            std::filesystem::create_directories(results_path);
 
 #ifdef BUILD_DATABASE
             // Record experiment configuration
@@ -102,7 +101,7 @@ int main(int argc, char** argv) {
                 results.descriptor_type = desc_config.name;
                 results.dataset_name = yaml_config.dataset.path;
                 results.processing_time_ms = duration.count();
-                results.mean_average_precision = experiment_metrics.mean_average_precision;
+                results.mean_average_precision = experiment_metrics.legacy_macro_precision_by_scene;
                 results.precision_at_1 = experiment_metrics.mean_precision;
                 results.precision_at_5 = experiment_metrics.mean_precision;
                 results.recall_at_1 = 0.0;
@@ -111,6 +110,46 @@ int main(int argc, char** argv) {
                 results.total_keypoints = experiment_metrics.total_keypoints;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
+                // True IR-style mAP metrics (conditional - excluding R=0)
+                results.metadata["true_map_micro"] = std::to_string(experiment_metrics.true_map_micro);
+                results.metadata["true_map_macro_by_scene"] = std::to_string(experiment_metrics.true_map_macro_by_scene);
+                // True IR-style mAP metrics (punitive - including R=0 as AP=0)
+                results.metadata["true_map_micro_with_zeros"] = std::to_string(experiment_metrics.true_map_micro_including_zeros);
+                results.metadata["true_map_macro_with_zeros"] = std::to_string(experiment_metrics.true_map_macro_by_scene_including_zeros);
+                // Query statistics
+                results.metadata["total_queries_processed"] = std::to_string(experiment_metrics.total_queries_processed);
+                results.metadata["total_queries_excluded"] = std::to_string(experiment_metrics.total_queries_excluded);
+                // Precision@K and Recall@K metrics
+                results.metadata["precision_at_1"] = std::to_string(experiment_metrics.precision_at_1);
+                results.metadata["precision_at_5"] = std::to_string(experiment_metrics.precision_at_5);
+                results.metadata["precision_at_10"] = std::to_string(experiment_metrics.precision_at_10);
+                results.metadata["recall_at_1"] = std::to_string(experiment_metrics.recall_at_1);
+                results.metadata["recall_at_5"] = std::to_string(experiment_metrics.recall_at_5);
+                results.metadata["recall_at_10"] = std::to_string(experiment_metrics.recall_at_10);
+                // R=0 rate for transparency
+                int total_all = experiment_metrics.total_queries_processed + experiment_metrics.total_queries_excluded;
+                double r0_rate = total_all > 0 ? (double)experiment_metrics.total_queries_excluded / total_all : 0.0;
+                results.metadata["r0_rate"] = std::to_string(r0_rate);
+                
+                // Per-scene True mAP breakdown
+                for (const auto& [scene_name, scene_aps] : experiment_metrics.per_scene_ap) {
+                    if (scene_aps.empty()) continue;
+                    
+                    double scene_ap_sum = std::accumulate(scene_aps.begin(), scene_aps.end(), 0.0);
+                    double scene_true_map = scene_ap_sum / static_cast<double>(scene_aps.size());
+                    results.metadata[scene_name + "_true_map"] = std::to_string(scene_true_map);
+                    results.metadata[scene_name + "_query_count"] = std::to_string(scene_aps.size());
+                    
+                    // Per-scene with zeros (punitive)
+                    int excluded_count = experiment_metrics.per_scene_excluded.count(scene_name) ? 
+                                       experiment_metrics.per_scene_excluded.at(scene_name) : 0;
+                    int total_scene_queries = static_cast<int>(scene_aps.size()) + excluded_count;
+                    if (total_scene_queries > 0) {
+                        double scene_true_map_with_zeros = scene_ap_sum / static_cast<double>(total_scene_queries);
+                        results.metadata[scene_name + "_true_map_with_zeros"] = std::to_string(scene_true_map_with_zeros);
+                        results.metadata[scene_name + "_excluded_count"] = std::to_string(excluded_count);
+                    }
+                }
                 
                 db.recordExperiment(results);
             }
@@ -124,7 +163,7 @@ int main(int argc, char** argv) {
         }
 
         LOG_INFO("🎉 Experiment completed: " + yaml_config.experiment.name);
-        LOG_INFO("Results saved to: " + results_base);
+        LOG_INFO("📊 Experiment results saved to database");
 
         return 0;
 

@@ -29,6 +29,16 @@ public:
      */
     static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
                                                    const thesis_project::database::DatabaseManager& db);
+    
+    /**
+     * @brief Generate locked-in keypoints for specific keypoint set
+     * @param dataFolderPath Path to HPatches data folder containing scene subdirectories
+     * @param db Database manager for storing keypoints  
+     * @param keypoint_set_id ID of the keypoint set to store keypoints in
+     */
+    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+                                                   const thesis_project::database::DatabaseManager& db,
+                                                   int keypoint_set_id);
 #endif
 
 private:

@@ -90,6 +90,14 @@ namespace thesis_project {
     };
 
     /**
+     * @brief Keypoint source strategies for evaluation
+     */
+    enum class KeypointSource {
+        HOMOGRAPHY_PROJECTION,  ///< Transform keypoints from reference using homography (controlled evaluation)
+        INDEPENDENT_DETECTION   ///< Detect keypoints fresh on each image (realistic evaluation)
+    };
+
+    /**
      * @brief Matching algorithms
      */
     enum class MatchingMethod {
@@ -208,6 +216,20 @@ namespace thesis_project {
         }
     }
 
+    inline std::string toString(KeypointSource source) {
+        switch (source) {
+            case KeypointSource::HOMOGRAPHY_PROJECTION: return "homography_projection";
+            case KeypointSource::INDEPENDENT_DETECTION: return "independent_detection";
+            default: return "unknown";
+        }
+    }
+
+    inline KeypointSource keypointSourceFromString(const std::string& str) {
+        if (str == "homography_projection") return KeypointSource::HOMOGRAPHY_PROJECTION;
+        if (str == "independent_detection") return KeypointSource::INDEPENDENT_DETECTION;
+        return KeypointSource::HOMOGRAPHY_PROJECTION; // Default to controlled evaluation
+    }
+
     inline std::string toString(MatchingMethod method) {
         switch (method) {
             case MatchingMethod::BRUTE_FORCE: return "brute_force";
@@ -236,7 +258,9 @@ namespace thesis_project {
         float edge_threshold = 10.0f;
         float sigma = 1.6f;
         int num_octaves = 4;
-        bool use_locked_keypoints = false;
+        bool use_locked_keypoints = false;  // LEGACY: for backward compatibility
+        KeypointSource source = KeypointSource::HOMOGRAPHY_PROJECTION;  // NEW: keypoint source strategy
+        std::string keypoint_set_name;      // NEW: specific keypoint set to use
         std::string locked_keypoints_path;
     };
 

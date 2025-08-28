@@ -8,15 +8,21 @@ services:
     volumes:
       # Mount your source code
       - .:/workspace
-      # Mount X11 socket for GUI applications
+      # Mount X11 socket for GUI applications (for analysis visualizations)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
 
     environment:
-      # X11 forwarding for OpenCV display functions
+      # X11 forwarding for analysis and visualization
       - DISPLAY=${DISPLAY}
 
-    # Keep container running
+    # Keep container running for development
     command: tail -f /dev/null
 
     stdin_open: true
     tty: true
+
+    # Usage:
+    # docker-compose -f docker-compose.dev.yml up -d
+    # docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
+    # cd build && cmake .. -DBUILD_DATABASE=ON && make -j$(nproc)
+    # ./experiment_runner ../config/experiments/sift_baseline.yaml

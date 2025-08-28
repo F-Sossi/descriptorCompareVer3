@@ -13,6 +13,8 @@
 #endif
 #include "thesis_project/types.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
+#include "src/core/metrics/MetricsCalculator.hpp"
+#include "src/core/metrics/TrueAveragePrecision.hpp"
 
 namespace fs = boost::filesystem;
 // TODO: Add another method to visual check the locked in keypoints
@@ -72,18 +74,6 @@ std::string normTypeToDescriptiveString(int normType) {
     }
 }
 
-cv::Scalar getKeypointColor(size_t index) {
-    static const std::vector<cv::Scalar> colors = {
-            cv::Scalar(255, 0, 0),     // Blue
-            cv::Scalar(0, 255, 0),     // Green
-            cv::Scalar(0, 0, 255),     // Red
-            cv::Scalar(255, 255, 0),   // Cyan
-            cv::Scalar(255, 0, 255),   // Magenta
-            cv::Scalar(0, 255, 255),   // Yellow
-            // Add more colors if needed
-    };
-    return colors[index % colors.size()];
-}
 
 ExperimentMetrics image_processor::process_directory(const std::string &data_folder, const std::string &results_folder, const experiment_config &config) {
     ExperimentMetrics overall_metrics;
@@ -91,15 +81,9 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
     try {
         if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
             std::cerr << "Invalid data folder: " << data_folder << std::endl;
-            overall_metrics.success = false;
-            overall_metrics.error_message = "Invalid data folder: " + data_folder;
-            return overall_metrics;
+            return ExperimentMetrics::createError("Invalid data folder: " + data_folder);
         }
-
-        if (!fs::exists(results_folder)) {
-            fs::create_directories(results_folder);
-        }
-
+        
         std::vector<std::future<ExperimentMetrics>> futures;
         std::vector<ExperimentMetrics> folder_metrics;
 
@@ -121,16 +105,10 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
                             }
                         } catch (const std::exception &e) {
                             std::cerr << "Exception in async task: " << e.what() << std::endl;
-                            ExperimentMetrics error_metrics;
-                            error_metrics.success = false;
-                            error_metrics.error_message = "Exception in async task: " + std::string(e.what());
-                            return error_metrics;
+                            return ExperimentMetrics::createError("Exception in async task: " + std::string(e.what()));
                         } catch (...) {
                             std::cerr << "Unknown exception in async task" << std::endl;
-                            ExperimentMetrics error_metrics;
-                            error_metrics.success = false;
-                            error_metrics.error_message = "Unknown exception in async task";
-                            return error_metrics;
+                            return ExperimentMetrics::createError("Unknown exception in async task");
                         }
                     });
                     futures.push_back(std::move(fut));
@@ -140,13 +118,13 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
                     try {
                         ExperimentMetrics folder_result;
                         if (config.verificationType == MATCHES) {
-                            visual_verification_matches(path.string(), results_subfolder, config);
+                            VisualVerification::verifyMatches(path.string(), results_subfolder, config);
                             // Visual verification doesn't return metrics, mark as successful but no data
-                            folder_result.success = true;
+                            folder_result = ExperimentMetrics::createSuccess();
                         } else if (config.verificationType == HOMOGRAPHY) {
-                            visual_verification_homography(path.string(), results_subfolder, config);
+                            VisualVerification::verifyHomography(path.string(), results_subfolder, config);
                             // Visual verification doesn't return metrics, mark as successful but no data
-                            folder_result.success = true;
+                            folder_result = ExperimentMetrics::createSuccess();
                         } else {
                             if(config.descriptorOptions.UseLockedInKeypoints) {
                                 folder_result = process_image_folder_keypoints_locked(path.string(), results_subfolder, config);
@@ -157,16 +135,10 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
                         folder_metrics.push_back(folder_result);
                     } catch (const std::exception &e) {
                         std::cerr << "Exception in synchronous task: " << e.what() << std::endl;
-                        ExperimentMetrics error_metrics;
-                        error_metrics.success = false;
-                        error_metrics.error_message = "Exception in synchronous task: " + std::string(e.what());
-                        folder_metrics.push_back(error_metrics);
+                        folder_metrics.push_back(ExperimentMetrics::createError("Exception in synchronous task: " + std::string(e.what())));
                     } catch (...) {
                         std::cerr << "Unknown exception in synchronous task" << std::endl;
-                        ExperimentMetrics error_metrics;
-                        error_metrics.success = false;
-                        error_metrics.error_message = "Unknown exception in synchronous task";
-                        folder_metrics.push_back(error_metrics);
+                        folder_metrics.push_back(ExperimentMetrics::createError("Unknown exception in synchronous task"));
                     }
                 }
             }
@@ -180,61 +152,23 @@ ExperimentMetrics image_processor::process_directory(const std::string &data_fol
                     folder_metrics.push_back(result);
                 } catch (const std::exception &e) {
                     std::cerr << "Exception caught during future.get(): " << e.what() << std::endl;
-                    ExperimentMetrics error_metrics;
-                    error_metrics.success = false;
-                    error_metrics.error_message = "Exception during future.get(): " + std::string(e.what());
-                    folder_metrics.push_back(error_metrics);
+                    folder_metrics.push_back(ExperimentMetrics::createError("Exception during future.get(): " + std::string(e.what())));
                 } catch (...) {
                     std::cerr << "Unknown exception caught during future.get()" << std::endl;
-                    ExperimentMetrics error_metrics;
-                    error_metrics.success = false;
-                    error_metrics.error_message = "Unknown exception during future.get()";
-                    folder_metrics.push_back(error_metrics);
+                    folder_metrics.push_back(ExperimentMetrics::createError("Unknown exception during future.get()"));
                 }
             }
         }
 
-        // Aggregate all folder metrics into overall metrics
-        overall_metrics.success = true;
-        for (const auto& folder_metric : folder_metrics) {
-            if (!folder_metric.success) {
-                overall_metrics.success = false;
-                if (!overall_metrics.error_message.empty()) {
-                    overall_metrics.error_message += "; ";
-                }
-                overall_metrics.error_message += folder_metric.error_message;
-            }
-            
-            // Aggregate metrics
-            for (double precision : folder_metric.precisions_per_image) {
-                overall_metrics.precisions_per_image.push_back(precision);
-            }
-            overall_metrics.total_matches += folder_metric.total_matches;
-            overall_metrics.total_keypoints += folder_metric.total_keypoints;
-            overall_metrics.total_images_processed += folder_metric.total_images_processed;
-            
-            // Merge per-scene statistics
-            for (const auto& [scene, precision] : folder_metric.per_scene_precision) {
-                overall_metrics.per_scene_precision[scene] = precision;
-                overall_metrics.per_scene_matches[scene] = folder_metric.per_scene_matches.at(scene);
-                overall_metrics.per_scene_keypoints[scene] = folder_metric.per_scene_keypoints.at(scene);
-            }
-        }
-        
-        // Calculate final metrics
-        overall_metrics.calculateMeanPrecision();
-        
-        // Calculate processing time
+        // Aggregate all folder metrics using MetricsCalculator
         auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        overall_metrics.processing_time_ms = duration.count();
+        double processing_time_ms = MetricsCalculator::calculateProcessingTime(start_time, end_time);
+        overall_metrics = MetricsCalculator::aggregateMetrics(folder_metrics, processing_time_ms);
 
         return overall_metrics;
     } catch (const std::exception &e) {
         std::cerr << "Error processing directory: " << e.what() << std::endl;
-        overall_metrics.success = false;
-        overall_metrics.error_message = "Error processing directory: " + std::string(e.what());
-        return overall_metrics;
+        return ExperimentMetrics::createError("Error processing directory: " + std::string(e.what()));
     }
 }
 
@@ -242,9 +176,8 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
                                                             const experiment_config &config) {
     ExperimentMetrics metrics;
     std::string scene_name = boost::filesystem::path(folder).filename().string();
-    std::cout << "Processing locked folder: " << folder << "\nResults folder: " << results_folder << std::endl;
-
-    boost::filesystem::create_directories(results_folder);
+    std::cout << "Processing locked folder: " << folder << std::endl;
+    // Results folder creation removed - using database storage only
 
     // Read in 1.ppm as the base image
     cv::Mat image1 = cv::imread(folder + "/1.ppm", cv::IMREAD_COLOR);
@@ -254,6 +187,11 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         metrics.success = false;
         metrics.error_message = "Failed to read image: " + folder + "/1.ppm";
         return metrics;
+    }
+
+    // Apply color space conversion if needed (consistent with unlocked path)
+    if (config.descriptorOptions.descriptorColorSpace == D_BW) {
+        cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
     }
 
     // Load locked-in keypoints for image 1
@@ -296,19 +234,18 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
     }
 #endif
 
-    // Save keypoints and descriptors of the first image
-    if(config.descriptorOptions.recordKeypoints) {
-        processor_utils::saveKeypointsToCSV(results_folder + "/keypoints_1.csv", keypoints1);
-    }
-    if(config.descriptorOptions.recordDescriptors){
-        processor_utils::saveDescriptorsToCSV(results_folder + "/descriptors_1.csv", descriptors1);
-    }
+    // CSV outputs disabled - using database storage only
 
     for (int i = 2; i <= 6; i++) {
         std::string imagePath = folder + "/" + std::to_string(i) + ".ppm";
         cv::Mat image2 = cv::imread(imagePath, cv::IMREAD_COLOR);
 
         if (image2.empty()) continue;
+
+        // Apply same color space conversion as image1
+        if (config.descriptorOptions.descriptorColorSpace == D_BW) {
+            cv::cvtColor(image2, image2, cv::COLOR_BGR2GRAY);
+        }
 
         // Load locked-in keypoints for image i
         std::vector<cv::KeyPoint> keypoints2;
@@ -350,51 +287,88 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         }
 #endif
 
-        // Save keypoints and descriptors for each image processed in the loop
-        if(config.descriptorOptions.recordKeypoints) {
-            processor_utils::saveKeypointsToCSV(results_folder + "/keypoints_" + std::to_string(i) + ".csv", keypoints2);
-        }
-        if(config.descriptorOptions.recordDescriptors){
-            processor_utils::saveDescriptorsToCSV(results_folder + "/descriptors_" + std::to_string(i) + ".csv", descriptors2);
-        }
+        // CSV outputs disabled - using database storage only
 
         // Match descriptors
         std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
 
+        // Read homography matrix for true mAP computation
+        std::string homographyFilename = folder + "/H_1_" + std::to_string(i);
+        cv::Mat homography_1_to_i;
+        try {
+            homography_1_to_i = processor_utils::readHomography(homographyFilename);
+        } catch (const std::exception& e) {
+            // Continue with legacy evaluation only
+        }
+
         /*
-         * Geometric evaluation for homography-transformed keypoints:
+         * Dual evaluation system: Legacy precision + True IR-style mAP
          * 
-         * Since keypoints are now properly transformed using homography matrices, we need to evaluate
-         * matches based on spatial accuracy rather than index correspondence. The keypoints1 and keypoints2
-         * represent the same physical features, but keypoints2 are transformed to the coordinate system
-         * of image i.
+         * Legacy Method: Index correspondence check (backward compatibility)
+         * Since keypoints2 are transformed versions of keypoints1, we expect match.queryIdx == match.trainIdx
          * 
-         * For each descriptor match, we check if the matched keypoints are spatially close to their
-         * expected transformed positions. This accounts for:
-         * - Descriptor matching accuracy (how well descriptors represent the same feature)
-         * - Geometric consistency (whether matched features are in the right spatial relationship)
-         * - Transformation accuracy (how well the homography represents the actual viewpoint change)
+         * True mAP Method: Homography-based geometric correctness (research standard)
+         * For each query keypoint in image1, compute Average Precision using homography-based ground truth
          */
 
-        // Evaluate precision using known keypoint correspondences
-        // Since keypoints2 are transformed versions of keypoints1, we know the ground truth correspondences
+        // Legacy evaluation using known keypoint correspondences
         int correctMatches = 0;
-        
         for (const auto& match : matches) {
-            // Check if the descriptor matcher correctly identified the corresponding keypoints
-            // match.queryIdx should correspond to match.trainIdx since they represent the same physical feature
             if (match.queryIdx == match.trainIdx) {
                 correctMatches++;
             }
         }
-        
         double precision = matches.empty() ? 0.0 : static_cast<double>(correctMatches) / matches.size();
 
-        // Capture metrics (in addition to CSV for now)
-        metrics.addImageResult(scene_name, precision, matches.size(), keypoints2.size());
+        // True IR-style mAP computation (if homography available)
+        if (!homography_1_to_i.empty() && !keypoints1.empty() && !keypoints2.empty()) {
+            
+            // TRUE IR-style mAP: Evaluate ALL queries against ALL targets
+            for (int query_idx = 0; query_idx < static_cast<int>(keypoints1.size()); ++query_idx) {
+                // Compute descriptor distances from this query to ALL target keypoints
+                std::vector<double> all_distances;
+                cv::Mat query_descriptor = descriptors1.row(query_idx);
+                
+                // Skip queries with invalid descriptors (rare but possible)
+                if (query_descriptor.empty() || cv::norm(query_descriptor) == 0.0) {
+                    // Add dummy result for excluded query
+                    TrueAveragePrecision::QueryAPResult dummy_result;
+                    dummy_result.ap = 0.0;
+                    dummy_result.has_potential_match = false;
+                    metrics.addQueryAP(scene_name, dummy_result);
+                    continue;
+                }
+                
+                for (int target_idx = 0; target_idx < static_cast<int>(keypoints2.size()); ++target_idx) {
+                    cv::Mat target_descriptor = descriptors2.row(target_idx);
+                    
+                    // Check for valid descriptors (guard against NaN/empty)
+                    if (query_descriptor.empty() || target_descriptor.empty()) {
+                        all_distances.push_back(std::numeric_limits<double>::infinity());
+                        continue;
+                    }
+                    
+                    // Compute L2SQR distance for speed (ranking unchanged)
+                    double distance = cv::norm(query_descriptor, target_descriptor, cv::NORM_L2SQR);
+                    all_distances.push_back(distance);
+                }
+                
+                // Compute Average Precision for this query against ALL targets
+                auto ap_result = TrueAveragePrecision::computeQueryAP(
+                    keypoints1[query_idx],     // Query keypoint in image 1
+                    homography_1_to_i,        // Homography from image 1 to image i
+                    keypoints2,               // ALL keypoints in image i  
+                    all_distances,            // Descriptor distances to ALL targets
+                    3.0                       // Default pixel tolerance (τ=3.0px)
+                );
+                
+                // Add to metrics accumulation
+                metrics.addQueryAP(scene_name, ap_result);
+            }
+        }
 
-        std::vector<std::string> headers = {"Image_Reference", "Precision"};
-        processor_utils::saveResults(results_folder + "/results.csv", headers, {{std::to_string(i), std::to_string(precision)}});
+        // Capture metrics for database storage
+        metrics.addImageResult(scene_name, precision, matches.size(), keypoints2.size());
     }
 
     // Finalize metrics calculation
@@ -407,9 +381,8 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
                                                               const experiment_config &config) {
     ExperimentMetrics metrics;
     std::string scene_name = boost::filesystem::path(folder).filename().string();
-    std::cout << "Processing folder: " << folder << "\nResults folder: " << results_folder << std::endl;
-
-    boost::filesystem::create_directories(results_folder);
+    std::cout << "Processing folder: " << folder << std::endl;
+    // Results folder creation removed - using database storage only
 
     // Read in 1.ppm as the base image
     cv::Mat image1 = cv::imread(folder + "/1.ppm", cv::IMREAD_COLOR);
@@ -423,15 +396,7 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
     std::vector<cv::KeyPoint> keypoints1 = result1.first;
     cv::Mat descriptors1 = result1.second;
 
-    // Save keypoints and descriptors of the first image
-    if(config.descriptorOptions.recordKeypoints) {
-        processor_utils::saveKeypointsToCSV(results_folder + "/keypoints_1.csv", keypoints1);
-    }
-
-    if(config.descriptorOptions.recordDescriptors){
-        processor_utils::saveDescriptorsToCSV(results_folder + "/descriptors_1.csv", descriptors1);
-    }
-
+    // CSV outputs disabled - using database storage only
 
     for (int i = 2; i <= 6; i++) {
         std::string imagePath = folder + "/" + std::to_string(i) + ".ppm";
@@ -439,17 +404,16 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
 
         if (image2.empty()) continue;
 
+        // Apply same color conversion as image1 BEFORE descriptor computation
+        if (config.descriptorOptions.descriptorColorSpace == D_BW) {
+            cv::cvtColor(image2, image2, cv::COLOR_BGR2GRAY);
+        }
+
         std::pair<std::vector<cv::KeyPoint>, cv::Mat> result2 = processor_utils::detectAndComputeWithConfig(image2, config);
         std::vector<cv::KeyPoint> keypoints2 = result2.first;
         cv::Mat descriptors2 = result2.second;
 
-        // Save keypoints and descriptors for each image processed in the loop
-        if(config.descriptorOptions.recordKeypoints) {
-            processor_utils::saveKeypointsToCSV(results_folder + "/keypoints_" + std::to_string(i) + ".csv", keypoints2);
-        }
-        if(config.descriptorOptions.recordDescriptors){
-            processor_utils::saveDescriptorsToCSV(results_folder + "/descriptors_" + std::to_string(i) + ".csv", descriptors2);
-        }
+        // CSV outputs disabled - using database storage only
 
         // Match normal descriptors
         std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
@@ -458,30 +422,75 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
         });
         std::vector<cv::DMatch> topMatches = std::vector<cv::DMatch>(matches.begin(), matches.begin() + std::min(2000, (int)matches.size()));
 
-        // Read the corresponding homography matrix
-        std::string homographyFilename = folder + "/H_1_" + std::to_string(i);
-        cv::Mat homography = processor_utils::readHomography(homographyFilename);
+        // Legacy precision calculation
+        int correctMatches = 0;
+        for (const auto& match : matches) {
+            if (match.queryIdx == match.trainIdx) {
+                correctMatches++;
+            }
+        }
+        double precision = matches.empty() ? 0.0 : static_cast<double>(correctMatches) / matches.size();
 
-        // Project keypoints from the first image to the second using the homography matrix
-        std::vector<cv::Point2f> points1;
-        for (const auto& kp : keypoints1) {
-            points1.push_back(kp.pt);
+        // Read homography matrix for true mAP computation
+        std::string homographyFilename = folder + "/H_1_" + std::to_string(i);
+        cv::Mat homography_1_to_i;
+        try {
+            homography_1_to_i = processor_utils::readHomography(homographyFilename);
+        } catch (const std::exception& e) {
+            // Continue with legacy evaluation only
         }
 
-        std::vector<cv::Point2f> projectedPoints;
-        cv::perspectiveTransform(points1, projectedPoints, homography);
+        // True IR-style mAP computation (if homography available)
+        if (!homography_1_to_i.empty() && !keypoints1.empty() && !keypoints2.empty()) {
+            
+            // TRUE IR-style mAP: Evaluate ALL queries against ALL targets
+            for (int query_idx = 0; query_idx < static_cast<int>(keypoints1.size()); ++query_idx) {
+                // Compute descriptor distances from this query to ALL target keypoints
+                std::vector<double> all_distances;
+                cv::Mat query_descriptor = descriptors1.row(query_idx);
+                
+                // Skip queries with invalid descriptors (rare but possible)
+                if (query_descriptor.empty() || cv::norm(query_descriptor) == 0.0) {
+                    // Add dummy result for excluded query
+                    TrueAveragePrecision::QueryAPResult dummy_result;
+                    dummy_result.ap = 0.0;
+                    dummy_result.has_potential_match = false;
+                    metrics.addQueryAP(scene_name, dummy_result);
+                    continue;
+                }
+                
+                for (int target_idx = 0; target_idx < static_cast<int>(keypoints2.size()); ++target_idx) {
+                    cv::Mat target_descriptor = descriptors2.row(target_idx);
+                    
+                    // Check for valid descriptors (guard against NaN/empty)
+                    if (query_descriptor.empty() || target_descriptor.empty()) {
+                        all_distances.push_back(std::numeric_limits<double>::infinity());
+                        continue;
+                    }
+                    
+                    // Compute L2SQR distance for speed (ranking unchanged)
+                    double distance = cv::norm(query_descriptor, target_descriptor, cv::NORM_L2SQR);
+                    all_distances.push_back(distance);
+                }
+                
+                // Compute Average Precision for this query against ALL targets
+                auto ap_result = TrueAveragePrecision::computeQueryAP(
+                    keypoints1[query_idx],     // Query keypoint in image 1
+                    homography_1_to_i,        // Homography from image 1 to image i
+                    keypoints2,               // ALL keypoints in image i  
+                    all_distances,            // Descriptor distances to ALL targets
+                    3.0                       // Default pixel tolerance (τ=3.0px)
+                );
+                
+                // Add to metrics accumulation
+                metrics.addQueryAP(scene_name, ap_result);
+            }
+        }
 
-        double scaleFactor = processor_utils::calculateRelativeScalingFactor(image1);
-        double adjustedThreshold = processor_utils::adjustMatchThresholdForImageSet(config.matchThreshold, scaleFactor);
+        // Capture metrics
+        metrics.addImageResult(scene_name, precision, matches.size(), keypoints2.size());
 
-        // Calculate precision
-        double precision = processor_utils::calculatePrecision(topMatches, keypoints2, projectedPoints, adjustedThreshold);
-
-        // Capture metrics (in addition to CSV for now)
-        metrics.addImageResult(scene_name, precision, topMatches.size(), keypoints2.size());
-
-        std::vector<std::string> headers = {"Image_Reference", "Precision"};
-        processor_utils::saveResults(results_folder + "/results.csv", headers, {{std::to_string(i), std::to_string(precision)}});
+        // Results stored in database only
 
     }
 
@@ -491,154 +500,3 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
     return metrics;
 }
 
-// TODO: Reach goal fix this so you can compare different modifications (not needed but nice to have)
-void image_processor::visual_verification_matches(const std::string &folder, const std::string &results_folder, const experiment_config &config) {
-    std::cout << "Processing folder: " << folder << "\nResults folder: " << results_folder << std::endl;
-
-    // Read in 1.ppm as the base image
-    cv::Mat image1 = cv::imread(folder + "/1.ppm", cv::IMREAD_COLOR);
-    if (config.descriptorOptions.descriptorColorSpace == D_BW) {
-        cv::cvtColor(image1, image1, cv::COLOR_BGR2RGB);
-    }
-
-    // Use detector from config to detect keypoints in image 1 using the processor utils detect and compute function
-    std::pair<std::vector<cv::KeyPoint>, cv::Mat> result1 = processor_utils::detectAndCompute(config.detector, image1);
-    std::vector<cv::KeyPoint> keypoints1 = result1.first;
-    cv::Mat descriptors1 = result1.second;
-
-    // Compute DSP descriptors for image 1 using factory system
-    auto dspPoolingStrategy = thesis_project::pooling::PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
-    cv::Mat dspDescriptors1 = dspPoolingStrategy->computeDescriptors(image1, keypoints1, config.detector, config);
-
-    for (int i = 2; i <= 6; i++) {
-        std::string imagePath = folder + "/" + std::to_string(i) + ".ppm";
-        cv::Mat image2 = cv::imread(imagePath, cv::IMREAD_COLOR);
-
-        if (image2.empty()) continue;
-        if (config.descriptorOptions.descriptorColorSpace == D_BW) {
-            cv::cvtColor(image2, image2, cv::COLOR_BGR2RGB);
-        }
-
-        // Detect and compute for image 2
-        std::pair<std::vector<cv::KeyPoint>, cv::Mat> result2 = processor_utils::detectAndCompute(config.detector, image2);
-        std::vector<cv::KeyPoint>keypoints2 = result2.first;
-        cv::Mat descriptors2 = result2.second;
-
-        // Compute DSP descriptors for image 2 using factory system
-        cv::Mat dspDescriptors2 = dspPoolingStrategy->computeDescriptors(image2, keypoints2, config.detector, config);
-
-        // Match normal descriptors
-        std::vector<cv::DMatch> matches = processor_utils::matchDescriptors(descriptors1, descriptors2, config.matchingStrategy);
-        std::sort(matches.begin(), matches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
-            return a.distance < b.distance;
-        });
-        std::vector<cv::DMatch> topMatches = std::vector<cv::DMatch>(matches.begin(), matches.begin() + std::min(100, (int)matches.size()));
-
-        // Match DSP descriptors
-        std::vector<cv::DMatch> dspMatches = processor_utils::matchDescriptors(dspDescriptors1, dspDescriptors2, config.matchingStrategy);
-        std::sort(dspMatches.begin(), dspMatches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
-            return a.distance < b.distance;
-        });
-        std::vector<cv::DMatch> topDspMatches = std::vector<cv::DMatch>(dspMatches.begin(), dspMatches.begin() + std::min(50, (int)dspMatches.size()));
-
-        // Visual comparison
-        cv::Mat img_matches, dsp_img_matches;
-        cv::drawMatches(image1, keypoints1, image2, keypoints2, topMatches, img_matches, cv::Scalar::all(-1),
-                        cv::Scalar::all(-1), std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-        cv::drawMatches(image1, keypoints1, image2, keypoints2, topDspMatches, dsp_img_matches, cv::Scalar::all(-1),
-                        cv::Scalar::all(-1), std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-        // Show both matches side by side
-        cv::imshow("Normal Descriptors Matches", img_matches);
-        cv::imshow("DSP Descriptors Matches", dsp_img_matches);
-        cv::waitKey(0); // Wait for a key press
-
-        // Destroy the windows to clean up and move to the next iteration
-        cv::destroyWindow("Normal Descriptors Matches");
-        cv::destroyWindow("DSP Descriptors Matches");
-    }
-}
-
-void image_processor::visual_verification_homography(const std::string& folder, const std::string& results_folder, const experiment_config& config) {
-    // Read in 1.ppm as the reference image
-    cv::Mat referenceImage = cv::imread(folder + "/1.ppm", cv::IMREAD_COLOR);
-
-    // Detect keypoints and compute descriptors for the reference image
-    std::vector<cv::KeyPoint> referenceKeypoints;
-    cv::Mat referenceDescriptors;
-    config.detector->detectAndCompute(referenceImage, cv::noArray(), referenceKeypoints, referenceDescriptors);
-
-    // Sort the keypoints based on their response (strength)
-    std::sort(referenceKeypoints.begin(), referenceKeypoints.end(), [](const cv::KeyPoint& a, const cv::KeyPoint& b) {
-        return a.response > b.response;
-    });
-
-    // Select the top 100 keypoints
-    std::vector<cv::KeyPoint> top100Keypoints(referenceKeypoints.begin(), referenceKeypoints.begin() + std::min(1000, static_cast<int>(referenceKeypoints.size())));
-
-    // Extract the point coordinates from the top 100 keypoints
-    std::vector<cv::Point2f> top100Points;
-    for (const auto& keypoint : top100Keypoints) {
-        top100Points.push_back(keypoint.pt);
-    }
-
-    // Draw the keypoints on the reference image
-    cv::Mat referenceImageWithKeypoints = referenceImage.clone();
-    for (size_t i = 0; i < top100Keypoints.size(); i++) {
-        const cv::KeyPoint& keypoint = top100Keypoints[i];
-        cv::Scalar color = getKeypointColor(i);
-        cv::drawKeypoints(referenceImageWithKeypoints, std::vector<cv::KeyPoint>{keypoint}, referenceImageWithKeypoints, color, cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-    }
-
-    // Iterate over the other images (2.ppm - 6.ppm)
-    for (int i = 2; i <= 6; i++) {
-        std::string imageFilename = folder + "/" + std::to_string(i) + ".ppm";
-        cv::Mat image = cv::imread(imageFilename, cv::IMREAD_COLOR);
-
-        if (image.empty()) {
-            std::cerr << "Failed to read image: " << imageFilename << std::endl;
-            continue;
-        }
-
-        // Read the corresponding homography matrix
-        std::string homographyFilename = folder + "/H_1_" + std::to_string(i);
-        cv::Mat homography = processor_utils::readHomography(homographyFilename);
-
-        // Project the top 100 points from the reference image onto the current image
-        std::vector<cv::Point2f> projectedPoints;
-        cv::perspectiveTransform(top100Points, projectedPoints, homography);
-
-        // Convert the projected points to cv::KeyPoint objects
-        std::vector<cv::KeyPoint> projectedKeypoints;
-        for (size_t j = 0; j < projectedPoints.size(); j++) {
-            const cv::Point2f& point = projectedPoints[j];
-            const cv::KeyPoint& referenceKeypoint = top100Keypoints[j];
-            float size = referenceKeypoint.size;
-            float angle = referenceKeypoint.angle;
-            projectedKeypoints.emplace_back(cv::KeyPoint(point, size, angle));
-        }
-
-        // Draw the projected keypoints on the current image
-        cv::Mat imageWithProjectedKeypoints = image.clone();
-        for (size_t y = 0; y < projectedKeypoints.size(); y++) {
-            const cv::KeyPoint& keypoint = projectedKeypoints[y];
-            cv::Scalar color = getKeypointColor(y);
-            cv::drawKeypoints(imageWithProjectedKeypoints, std::vector<cv::KeyPoint>{keypoint}, imageWithProjectedKeypoints, color, cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-        }
-
-        // Display the reference image with keypoints
-        std::string referenceWindowName = "Reference Image - 1.ppm";
-        cv::imshow(referenceWindowName, referenceImageWithKeypoints);
-
-        // Display the current image with projected keypoints in a separate window
-        std::string currentImageWindowName = "Projected Keypoints - " + std::to_string(i) + ".ppm";
-        cv::imshow(currentImageWindowName, imageWithProjectedKeypoints);
-
-        cv::waitKey(0); // Wait for a key press to continue
-
-        // Close the displayed images windows
-        cv::destroyWindow(referenceWindowName);
-        cv::destroyWindow(currentImageWindowName);
-
-    }
-}

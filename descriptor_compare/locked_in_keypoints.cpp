@@ -1,4 +1,5 @@
 #include "locked_in_keypoints.hpp"
+#include "processor_utils.hpp"
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/core.hpp>
@@ -188,6 +189,102 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
                 // Store transformed keypoints in database
                 std::string imageName = std::to_string(i) + ".ppm";
                 if (!db.storeLockedKeypoints(subfolderName, imageName, transformedKeypoints)) {
+                    std::cerr << "Failed to store keypoints for " << subfolderName << "/" << imageName << std::endl;
+                }
+            }
+        }
+    }
+}
+
+void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+                                                           const thesis_project::database::DatabaseManager& db,
+                                                           int keypoint_set_id) {
+    if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
+        throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
+    }
+
+    cv::Ptr<cv::SIFT> detector = cv::SIFT::create();
+    const int BORDER = 40;
+
+    for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
+        const fs::path subfolderPath = entry.path();
+        if (fs::is_directory(subfolderPath)) {
+            const std::string subfolderName = subfolderPath.filename().generic_string();
+            std::cout << "Processing scene: " << subfolderName << std::endl;
+
+            // Process the reference image (1.ppm) first
+            fs::path imagePath = subfolderPath / "1.ppm";
+            if (!fs::exists(imagePath)) {
+                std::cerr << "Reference image 1.ppm not found in folder: " << subfolderName << std::endl;
+                continue;
+            }
+
+            cv::Mat image1 = cv::imread(imagePath.string(), cv::IMREAD_GRAYSCALE);
+            if (image1.empty()) {
+                std::cerr << "Could not load image: " << imagePath.string() << std::endl;
+                continue;
+            }
+
+            std::vector<cv::KeyPoint> keypoints;
+            detector->detect(image1, keypoints);
+
+            // Apply boundary filtering to original keypoints
+            keypoints.erase(std::remove_if(keypoints.begin(), keypoints.end(), [image1](const cv::KeyPoint& keypoint) {
+                return keypoint.pt.x < BORDER || keypoint.pt.y < BORDER ||
+                       keypoint.pt.x > (image1.cols - BORDER) || keypoint.pt.y > (image1.rows - BORDER);
+            }), keypoints.end());
+
+            // Limit to 2000 keypoints (sorted by response)
+            if (keypoints.size() > 2000) {
+                std::sort(keypoints.begin(), keypoints.end(), [](const cv::KeyPoint& a, const cv::KeyPoint& b) {
+                    return a.response > b.response;
+                });
+                keypoints.resize(2000);
+            }
+
+            std::cout << "Number of keypoints: " << keypoints.size() << " Folder name: " << subfolderName << std::endl;
+
+            // Store reference image keypoints
+            if (db.storeLockedKeypointsForSet(keypoint_set_id, subfolderName, "1.ppm", keypoints)) {
+                std::cout << "Stored " << keypoints.size() << " keypoints for " << subfolderName << "/1.ppm" << std::endl;
+            } else {
+                std::cerr << "Failed to store keypoints for " << subfolderName << "/1.ppm" << std::endl;
+            }
+
+            // Process other images (2.ppm to 6.ppm)
+            for (int i = 2; i <= 6; ++i) {
+                cv::Mat homography = processor_utils::readHomography((subfolderPath / ("H_1_" + std::to_string(i))).string());
+                if (homography.empty()) {
+                    std::cerr << "Could not load homography file for image " << i << " in folder: " << subfolderName << std::endl;
+                    continue;
+                }
+
+                // Transform keypoints using homography
+                std::vector<cv::KeyPoint> transformedKeypoints = keypoints;
+                std::vector<cv::Point2f> originalPoints, transformedPoints;
+                cv::KeyPoint::convert(keypoints, originalPoints);
+                cv::perspectiveTransform(originalPoints, transformedPoints, homography);
+
+                for (size_t j = 0; j < transformedKeypoints.size(); ++j) {
+                    transformedKeypoints[j].pt = transformedPoints[j];
+                }
+
+                // Apply boundary filtering to transformed keypoints
+                transformedKeypoints.erase(std::remove_if(transformedKeypoints.begin(), transformedKeypoints.end(), [image1](const cv::KeyPoint& keypoint) {
+                    return keypoint.pt.x < BORDER || keypoint.pt.y < BORDER ||
+                           keypoint.pt.x > (image1.cols - BORDER) || keypoint.pt.y > (image1.rows - BORDER);
+                }), transformedKeypoints.end());
+
+                if (transformedKeypoints.empty()) {
+                    std::cerr << "All transformed keypoints are too close to the border for file: " << i << " in folder: " << subfolderName << std::endl;
+                    continue;
+                }
+
+                // Store transformed keypoints using keypoint set
+                std::string imageName = std::to_string(i) + ".ppm";
+                if (db.storeLockedKeypointsForSet(keypoint_set_id, subfolderName, imageName, transformedKeypoints)) {
+                    std::cout << "Stored " << transformedKeypoints.size() << " keypoints for " << subfolderName << "/" << imageName << std::endl;
+                } else {
                     std::cerr << "Failed to store keypoints for " << subfolderName << "/" << imageName << std::endl;
                 }
             }

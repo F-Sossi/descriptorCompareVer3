@@ -102,6 +102,7 @@ struct DescriptorOptions {
     bool recordKeypoints = false; ///< Flag to enable/disable recording keypoints
     bool recordDescriptors = false; ///< Flag to enable/disable recording descriptors
     bool UseLockedInKeypoints = true; ///< Flag to enable/disable locked-in keypoints
+    int max_features = 0; ///< Maximum number of keypoints to detect (0 = unlimited)
 
     DescriptorOptions() = default; ///< Default constructor
 };
@@ -208,7 +209,7 @@ public:
      * @brief Creates the descriptor extractor based on the descriptor type
      * @return Descriptor extractor
      */
-    static cv::Ptr<cv::Feature2D> createDescriptorExtractor(DescriptorType type) ;
+    static cv::Ptr<cv::Feature2D> createDescriptorExtractor(DescriptorType type, int max_features = 0);
     
     // Method to refresh detectors after configuration changes
     void refreshDetectors();

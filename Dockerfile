@@ -32,6 +32,8 @@ RUN apt-get update && apt-get install -y \
     # SQLite3 development package
     libsqlite3-dev \
     sqlite3 \
+    # YAML-cpp for experiment configuration
+    libyaml-cpp-dev \
     # ==========================================================
     # Additional utilities
     htop \
@@ -78,8 +80,18 @@ ENV DISPLAY=:0
 # Default command for development
 CMD ["bash"]
 
-# Production stage - minimal runtime
+# Production stage - minimal runtime with CLI tools
 FROM base AS production
 
 WORKDIR /workspace
-CMD ["./build/descriptor_compare"]
+
+# Copy built binaries (assumes they exist in build/)
+COPY build/experiment_runner ./
+COPY build/keypoint_manager ./
+COPY build/analysis_runner ./
+
+# Copy configuration files
+COPY config/ ./config/
+
+# Default command uses modern CLI experiment runner
+CMD ["./experiment_runner", "config/experiments/sift_baseline.yaml"]

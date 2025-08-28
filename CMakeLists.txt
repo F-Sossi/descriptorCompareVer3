@@ -168,61 +168,15 @@ endif()
 # MAIN APPLICATION
 # ================================
 
-set(DESCRIPTOR_COMPARE_SOURCES
-    descriptor_compare/main.cpp
-    descriptor_compare/experiment_config.cpp
-    descriptor_compare/image_processor.cpp
-    descriptor_compare/processor_utils.cpp
-    descriptor_compare/locked_in_keypoints.cpp
-    src/core/pooling/NoPooling.cpp
-    src/core/pooling/DomainSizePooling.cpp
-    src/core/pooling/StackingPooling.cpp
-    src/core/pooling/PoolingFactory.cpp
-    src/core/matching/BruteForceMatching.cpp
-    src/core/matching/MatchingFactory.cpp
-)
+# Legacy descriptor_compare executable removed - use experiment_runner CLI instead
 
-add_executable(descriptor_compare ${DESCRIPTOR_COMPARE_SOURCES})
-target_include_directories(descriptor_compare PRIVATE descriptor_compare)
+# Database integration moved to CLI tools (experiment_runner, keypoint_manager)
 
-target_link_libraries(descriptor_compare
-    keypoints
-    Boost::system
-    Boost::filesystem
-)
-
-# Add database integration if enabled
-if(BUILD_DATABASE)
-    target_link_libraries(descriptor_compare thesis_database)
-    target_compile_definitions(descriptor_compare PRIVATE BUILD_DATABASE=1)
-endif()
-
-if(USE_CONAN)
-    target_link_libraries(descriptor_compare ${OpenCV_LIBS})
-    if(TBB_FOUND)
-        target_link_libraries(descriptor_compare ${TBB_LIBS})
-    endif()
-    target_link_libraries(descriptor_compare ${SQLite3_LIBS})
-else()
-    target_link_libraries(descriptor_compare ${OpenCV_LIBRARIES})
-    if(TBB_FOUND)
-        target_link_libraries(descriptor_compare ${TBB_LIBRARIES})
-    endif()
-    target_link_libraries(descriptor_compare ${SQLite3_LIBRARIES})
-endif()
-
-# PATH DEFINITIONS
+# PATH DEFINITIONS (kept for compatibility with other targets)
 set(DATA_PATH "${CMAKE_CURRENT_SOURCE_DIR}/data/")
 set(RESULTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/results/")
 set(KEYPOINTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reference_keypoints/")
 set(DATABASE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/experiments.db")
-
-target_compile_definitions(descriptor_compare PRIVATE
-    DATA_PATH="${DATA_PATH}"
-    RESULTS_PATH="${RESULTS_PATH}"
-    KEYPOINTS_PATH="${KEYPOINTS_PATH}"
-    DATABASE_PATH="${DATABASE_PATH}"
-)
 
 # Create necessary directories
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/results)
@@ -313,8 +267,7 @@ add_custom_target(run_stage_tests
     COMMENT "Running all stage tests"
 )
 
-# Install rules
-install(TARGETS descriptor_compare DESTINATION bin)
+# Install rules - descriptor_compare removed, use experiment_runner instead
 install(DIRECTORY config/ DESTINATION share/descriptor_compare/config
         FILES_MATCHING PATTERN "*.yaml" PATTERN "*.yml")
 
@@ -404,6 +357,8 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
                        src/core/matching/MatchingFactory.cpp
+                       src/core/visualization/VisualVerification.cpp
+                       src/core/metrics/TrueAveragePrecision.cpp
                        descriptor_compare/experiment_config.cpp
                        descriptor_compare/image_processor.cpp
                        descriptor_compare/processor_utils.cpp

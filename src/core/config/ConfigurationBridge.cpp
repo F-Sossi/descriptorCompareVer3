@@ -61,8 +61,19 @@ namespace thesis_project::config {
             } else {
             }
             
-            // Locked keypoints
-            old_config.descriptorOptions.UseLockedInKeypoints = new_config.keypoints.params.use_locked_keypoints;
+            // Keypoint source configuration (NEW)
+            // Map keypoint source to legacy locked keypoints flag
+            bool use_locked = (new_config.keypoints.params.source == KeypointSource::HOMOGRAPHY_PROJECTION);
+            
+            // Handle backward compatibility: if use_locked_keypoints is explicitly set, respect it
+            if (new_config.keypoints.params.use_locked_keypoints) {
+                use_locked = true;
+            }
+            
+            old_config.descriptorOptions.UseLockedInKeypoints = use_locked;
+            
+            // Max features for keypoint detection
+            old_config.descriptorOptions.max_features = new_config.keypoints.params.max_features;
         }
         
         // Map evaluation parameters
@@ -96,6 +107,13 @@ namespace thesis_project::config {
         
         // Convert keypoint parameters (using defaults since old config doesn't store these directly)
         new_config.keypoints.params.use_locked_keypoints = old_config.descriptorOptions.UseLockedInKeypoints;
+        
+        // Map legacy locked keypoints flag to new keypoint source
+        new_config.keypoints.params.source = old_config.descriptorOptions.UseLockedInKeypoints 
+            ? KeypointSource::HOMOGRAPHY_PROJECTION 
+            : KeypointSource::INDEPENDENT_DETECTION;
+            
+        new_config.keypoints.params.max_features = old_config.descriptorOptions.max_features;
         
         // Convert descriptor configuration
         ExperimentConfig::DescriptorConfig desc_config;

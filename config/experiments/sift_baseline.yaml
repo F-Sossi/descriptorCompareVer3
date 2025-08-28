@@ -11,9 +11,12 @@ dataset:
 
 keypoints:
   generator: "sift"
-  max_features: 2000
+  max_features: 2000  # Back to 2000 for fair comparison
   contrast_threshold: 0.04
   edge_threshold: 10.0
+  source: "homography_projection"  # NEW: "homography_projection" or "independent_detection"
+  keypoint_set_name: "sift_unlimited_independent"  # Optional: specific keypoint set to use
+  use_locked_keypoints: false  # LEGACY: for backward compatibility
 
 descriptors:
   - name: "sift"

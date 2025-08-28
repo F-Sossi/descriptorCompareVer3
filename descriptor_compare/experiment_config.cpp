@@ -9,10 +9,10 @@
 
 
 experiment_config::experiment_config() {
-    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
+    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType, this->descriptorOptions.max_features);
 
     if(this->descriptorOptions.poolingStrategy == STACKING){
-        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
         if(this->detector2) {
         } else {
             std::cout << "[ERROR] Secondary detector creation failed!" << std::endl;
@@ -25,10 +25,10 @@ experiment_config::experiment_config() {
 
 [[maybe_unused]] experiment_config::experiment_config(const DescriptorOptions& options){
 
-    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
+    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType, this->descriptorOptions.max_features);
 
     if(this->descriptorOptions.poolingStrategy == STACKING){
-        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
     }
 
     verifyConfiguration();
@@ -37,10 +37,10 @@ experiment_config::experiment_config() {
 [[maybe_unused]] experiment_config::experiment_config(const std::string& configFilePath) {
     loadFromFile(configFilePath);
     // create descriptor pointer
-    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
+    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType, this->descriptorOptions.max_features);
 
     if(this->descriptorOptions.poolingStrategy == STACKING){
-        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
     }
 
     verifyConfiguration();
@@ -137,7 +137,7 @@ void experiment_config::setDescriptorOptions(const DescriptorOptions& options) {
 }
 
 void experiment_config::setDescriptorType(DescriptorType type) {
-    this->detector = createDescriptorExtractor(type);
+    this->detector = createDescriptorExtractor(type, this->descriptorOptions.max_features);
 }
 
 void experiment_config::setPoolingStrategy(PoolingStrategy strategy) {
@@ -181,10 +181,14 @@ void experiment_config::setUseMultiThreading(bool selection) {
  * and new descriptor type should be added in order to be used in the experiments
  * @return Descriptor extractor
  */
-cv::Ptr<cv::Feature2D> experiment_config::createDescriptorExtractor(DescriptorType type) {
+cv::Ptr<cv::Feature2D> experiment_config::createDescriptorExtractor(DescriptorType type, int max_features) {
     switch (type) {
         case DESCRIPTOR_SIFT:
-            return cv::SIFT::create();
+            if (max_features > 0) {
+                return cv::SIFT::create(max_features);
+            } else {
+                return cv::SIFT::create(); // Unlimited if max_features = 0
+            }
         case DESCRIPTOR_vSIFT:
             return VanillaSIFT::create();
         case DESCRIPTOR_RGBSIFT:
@@ -194,18 +198,22 @@ cv::Ptr<cv::Feature2D> experiment_config::createDescriptorExtractor(DescriptorTy
         default:
             // Print error message and return SIFT as default
             std::cerr << "Unknown descriptor type: " << type << ", using SIFT as default" << std::endl;
-            return cv::SIFT::create();
+            if (max_features > 0) {
+                return cv::SIFT::create(max_features);
+            } else {
+                return cv::SIFT::create();
+            }
     }
 }
 
 void experiment_config::refreshDetectors() {
     
     // Recreate primary detector
-    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType);
+    this->detector = createDescriptorExtractor(this->descriptorOptions.descriptorType, this->descriptorOptions.max_features);
     
     // Recreate secondary detector if stacking
     if(this->descriptorOptions.poolingStrategy == STACKING){
-        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2);
+        this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
         if(this->detector2) {
         } else {
             std::cout << "[ERROR] Secondary detector recreation failed!" << std::endl;

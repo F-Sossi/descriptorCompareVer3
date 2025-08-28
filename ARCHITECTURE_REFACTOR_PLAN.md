@@ -1,6 +1,6 @@
 # Complete Architecture Refactoring Plan
 
-## ✅ IMPLEMENTATION STATUS (As of 2025-08-18)
+## ✅ IMPLEMENTATION STATUS (As of 2025-08-26)
 
 ### **Phase 3 & 4 COMPLETE: Production-Ready Architecture**
 
@@ -51,22 +51,74 @@ After systematic review of all project files, here are the prioritized refactori
 - **Build Verification**: All targets compile and link successfully ✅
 - **Impact**: High - eliminated confusion and dead code, reduced technical debt
 
+#### **2. Large File Decomposition - COMPLETED ✅ (2025-08-26)**
+- **Problem**: `image_processor.cpp` was 644 lines - too large, mixed responsibilities
+- **Solution**: Successfully extracted into focused modules:
+  - **`src/core/metrics/ExperimentMetrics.hpp`** - Metrics computation and aggregation
+  - **`src/core/metrics/MetricsCalculator.hpp`** - Static utility methods for metrics
+  - **`src/core/visualization/VisualVerification.{hpp,cpp}`** - Visual debugging functions
+- **Results**: 
+  - **214 lines removed** (33% reduction): 644 → 430 lines
+  - **Improved maintainability** - smaller, focused modules
+  - **Enhanced testability** - components can be tested independently
+  - **Zero breaking changes** - all functionality preserved
+- **Build Verification**: All targets compile and link successfully ✅
+- **Impact**: High - major code organization improvement, reduced technical debt
+
+#### **3. Critical Metrics Mathematics - COMPLETELY FIXED ✅ (2025-08-26)**
+- **Problem**: Multiple critical mathematical errors in metrics calculations
+- **Fixed Issues**:
+  - ❌ **Mathematically incorrect per-scene averaging** (was dividing matches/keypoints!)
+  - ❌ **Stale values when empty** (old values preserved on empty inputs)
+  - ❌ **Unsafe merge operations** (`.at()` calls could throw on missing keys)  
+  - ❌ **Poor success flag semantics** (defaulted to failure)
+  - ❌ **Misleading field names** (implied IR-style mAP when it wasn't)
+- **Solutions Applied**:
+  - ✅ **Proper precision averaging** with individual value storage
+  - ✅ **Stale value protection** (always reset to 0.0 before calculation)
+  - ✅ **Exception-safe merge** using `.count()` with safe defaults
+  - ✅ **Optimistic success default** (`success = true`, set false on error)
+  - ✅ **Clear documentation** of non-IR mAP terminology
+- **Impact**: Critical - ensures research-quality mathematical accuracy
+
+#### **4. True IR-style Mean Average Precision (mAP) - IMPLEMENTED ✅ (2025-08-26)**
+- **Problem**: Existing "mAP" was macro average of scene precisions, NOT true IR-style mAP
+- **Solution**: Complete true mAP implementation following HPatches methodology:
+  - **`src/core/metrics/TrueAveragePrecision.{hpp,cpp}`** - Complete IR-style AP computation
+  - **Homography-based ground truth** - Uses HPatches H matrices for geometric relevance  
+  - **Single-GT policy (R=1)** - One relevant match per query within pixel tolerance τ
+  - **Proper ranked evaluation** - Sorts by descriptor distance, computes AP from ranked relevance
+  - **Standard IR formula**: `AP = (1/R) * Σ(Precision@k * 1[rel[k]=1])`
+- **Integration**: Extended `ExperimentMetrics` with dual mAP system:
+  - **`true_map_micro`** - Micro average over all queries (standard mAP)
+  - **`true_map_macro_by_scene`** - Macro average across scenes (balanced)
+  - **Backward compatibility** - Legacy `mean_average_precision` preserved
+- **Features**:
+  - ✅ **Configurable pixel tolerance** (default τ=3.0px, standard for HPatches)
+  - ✅ **Query exclusion handling** (R=0 queries handled per IR best practices)
+  - ✅ **Both micro and macro** aggregation methods
+  - ✅ **OpenCV integration** - Seamless with existing pipeline
+- **Status**: Infrastructure complete, ready for integration into processing pipeline
+- **Impact**: Critical - enables proper research comparison with IR-style mAP standard
+
 ### **🔧 HIGH PRIORITY REFACTORING**
 
-#### **2. Large File Decomposition**
-- **image_processor.cpp (644 lines)** - Break into smaller modules:
-  - Extract image I/O operations to `ImageIOUtils`
-  - Separate metrics calculation logic to `MetricsCalculator`  
-  - Split visual verification into `VisualVerification` module
-- **locked_in_keypoints.cpp (632 lines)** - Consider modularization
-- **Impact**: Medium - improves maintainability and testability
+#### **5. Integrate True mAP into Processing Pipeline - IN PROGRESS 🚧**
+- **Status**: Infrastructure complete, integration pending
+- **Required**:
+  - Update `image_processor.cpp` to compute true mAP alongside legacy metrics
+  - Integrate homography-based relevance into descriptor matching evaluation  
+  - Add per-query AP computation for each keypoint correspondence
+  - Update database storage to include true mAP values
+- **Goal**: Dual metrics system (legacy + true IR-style mAP) for research comparison
+- **Impact**: Critical - completes transition to research-standard evaluation
 
-#### **3. Test Framework Modernization**
+#### **6. Test Framework Modernization**
 - **Current**: 782 lines using manual main() functions with basic assertions
 - **Issues**: No test framework, manual success/failure checking, limited organization
 - **Recommended**: Adopt Google Test or Catch2 framework
 - **Benefits**: Test fixtures, parameterized tests, better assertions, CI/CD integration
-- **Priority**: High - significantly improves test quality and coverage
+- **Priority**: Medium - would improve test quality and coverage
 
 ### **📈 MEDIUM PRIORITY IMPROVEMENTS**
 
@@ -136,7 +188,10 @@ After systematic review of all project files, here are the prioritized refactori
 | Priority | Component | Effort | Impact | Status | Timeline |
 |----------|-----------|--------|--------|--------|----------|
 | ✅ **COMPLETE** | Legacy database cleanup | Low | High | **DONE** | **Completed 2025-08-19** |
-| 🔧 HIGH | Large file decomposition | High | Medium | Pending | **Next 2 weeks** |
+| ✅ **COMPLETE** | Large file decomposition | High | High | **DONE** | **Completed 2025-08-26** |
+| ✅ **COMPLETE** | Critical metrics mathematics | Medium | Critical | **DONE** | **Completed 2025-08-26** |
+| ✅ **COMPLETE** | True IR-style mAP infrastructure | High | Critical | **DONE** | **Completed 2025-08-26** |
+| 🔧 **CURRENT** | True mAP pipeline integration | Medium | Critical | **In Progress** | **Next session** |
 | 🔧 HIGH | Test framework adoption | Medium | Medium | Pending | **Next month** |
 | 📈 MEDIUM | Configuration enhancement | Low | Low-Med | Pending | **Next quarter** |
 | 📈 MEDIUM | Error handling improvement | Medium | Low-Med | Pending | **Gradual improvement** |
