@@ -41,6 +41,12 @@ RUN apt-get update && apt-get install -y \
     nano \
     && rm -rf /var/lib/apt/lists/*
 
+# Create user matching host user to avoid permission issues
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g $GROUP_ID dev && \
+    useradd -m -u $USER_ID -g dev dev
+
 # Install Python packages for research
 # Fix: Quote the numpy version constraint
 RUN pip3 install \
@@ -67,8 +73,11 @@ RUN apt-get update && apt-get install -y \
     clang-tidy \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup Conan
+# Setup Conan (must be done as root for system-wide config)
 RUN conan profile detect --force
+
+# Switch to development user for all subsequent operations
+USER dev
 
 # Create working directory
 WORKDIR /workspace
@@ -82,6 +91,9 @@ CMD ["bash"]
 
 # Production stage - minimal runtime with CLI tools
 FROM base AS production
+
+# Switch to non-root user for security
+USER dev
 
 WORKDIR /workspace
 

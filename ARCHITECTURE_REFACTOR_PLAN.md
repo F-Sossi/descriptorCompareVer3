@@ -41,6 +41,24 @@ After systematic review of all project files, here are the prioritized refactori
 
 ### **✅ COMPLETED ISSUES**
 
+#### **0. Complete CLI Migration & Legacy Removal - COMPLETED ✅ (2025-08-28)**
+- **Problem**: Legacy `descriptor_compare/main.cpp` with 268 lines of hardcoded experiment logic alongside modern CLI tools
+- **Solution**: Complete removal of legacy main executable and transition to pure CLI-only architecture
+- **Files Removed**: ✅
+  - `descriptor_compare/main.cpp` (268 lines of hardcoded experiments)
+  - CMakeLists.txt descriptor_compare target and linking
+  - All results folder creation code (database-only workflow)
+- **Modern CLI Architecture**: ✅
+  - `experiment_runner` - YAML-based experiment execution with full P@K/R@K metrics
+  - `keypoint_manager` - Complete keypoint generation and management with database storage
+  - `analysis_runner` - Analysis pipeline integration
+- **Docker Integration**: ✅
+  - Updated Dockerfile for CLI-only workflow with yaml-cpp dependency
+  - Enhanced docker-compose.dev.yml with usage examples
+  - Production container configuration for automated experiment running
+- **Results**: Pure CLI-only architecture, no legacy hardcoded configurations, clean database-only storage
+- **Impact**: Critical - eliminated major technical debt, simplified architecture, improved maintainability
+
 #### **1. Legacy Database Cleanup - COMPLETED ✅**
 - **Problem**: Duplicate database implementations (`database/` vs `src/core/database/`)
 - **Files Removed**: ✅
@@ -101,17 +119,42 @@ After systematic review of all project files, here are the prioritized refactori
 - **Status**: Infrastructure complete, ready for integration into processing pipeline
 - **Impact**: Critical - enables proper research comparison with IR-style mAP standard
 
+#### **5. Complete Keypoint Source Separation System - COMPLETED ✅ (2025-08-27)**
+- **Problem**: Single keypoint generation method limited research evaluation to controlled conditions only
+- **Solution**: Complete dual keypoint methodology system with database tracking
+- **Implementation**: ✅
+  - **Database Schema Enhancement**: Added `keypoint_sets` table with generation method tracking
+  - **Homography Projection Method**: Controlled evaluation using HPatches ground truth transformations
+  - **Independent Detection Method**: Realistic evaluation with fresh keypoint detection per image
+  - **CLI Integration**: `keypoint_manager` supports both `generate-projected` and `generate-independent`
+  - **Metadata Tracking**: Complete experiment traceability with keypoint set IDs and generation parameters
+- **Features**: ✅
+  - **Multiple Keypoint Sets**: Database stores unlimited named keypoint sets with different methodologies
+  - **Keypoint Set Management**: CLI tools for listing, counting, and managing keypoint collections
+  - **Method Comparison**: Direct performance comparison between controlled vs realistic conditions
+  - **Backward Compatibility**: Legacy keypoint loading preserved while adding new capabilities
+- **Research Impact**:
+  - **Controlled Evaluation**: Homography projection isolates descriptor performance from keypoint detection variability
+  - **Realistic Evaluation**: Independent detection provides real-world performance metrics
+  - **Methodology Documentation**: Complete traceability of which keypoint methodology was used for each experiment
+- **Results**: SIFT baseline shows different performance patterns - controlled vs realistic evaluation capabilities
+- **Impact**: Critical - enables comprehensive descriptor evaluation methodology comparison for research validity
+
 ### **🔧 HIGH PRIORITY REFACTORING**
 
-#### **5. Integrate True mAP into Processing Pipeline - IN PROGRESS 🚧**
-- **Status**: Infrastructure complete, integration pending
-- **Required**:
-  - Update `image_processor.cpp` to compute true mAP alongside legacy metrics
-  - Integrate homography-based relevance into descriptor matching evaluation  
-  - Add per-query AP computation for each keypoint correspondence
-  - Update database storage to include true mAP values
-- **Goal**: Dual metrics system (legacy + true IR-style mAP) for research comparison
-- **Impact**: Critical - completes transition to research-standard evaluation
+#### **6. True mAP Pipeline Integration - COMPLETED ✅ (2025-08-26)**
+- **Problem**: True mAP infrastructure existed but wasn't integrated into main processing pipeline
+- **Solution**: Complete integration of IR-style mAP computation with existing metrics system
+- **Implementation**: ✅
+  - **Pipeline Integration**: `image_processor.cpp` computes true mAP alongside legacy metrics
+  - **Per-Query AP Computation**: Individual AP calculation for each keypoint correspondence
+  - **Database Storage**: True mAP values stored in experiments database with per-scene breakdown
+  - **Dual Metrics System**: Both legacy precision and true IR-style mAP available for comparison
+- **Results**: ✅
+  - **SIFT Baseline Results**: 31.8% true mAP with detailed per-scene breakdown (i_dome: 33.47%, v_wall: 63.27%)
+  - **Precision@K Integration**: P@1=46.2%, P@5=55.3%, P@10=59.0% working correctly
+  - **Research Standards**: Full IR-style evaluation methodology implemented
+- **Impact**: Critical - enables proper research comparison with standard evaluation metrics
 
 #### **6. Test Framework Modernization**
 - **Current**: 782 lines using manual main() functions with basic assertions
@@ -187,15 +230,17 @@ After systematic review of all project files, here are the prioritized refactori
 
 | Priority | Component | Effort | Impact | Status | Timeline |
 |----------|-----------|--------|--------|--------|----------|
-| ✅ **COMPLETE** | Legacy database cleanup | Low | High | **DONE** | **Completed 2025-08-19** |
-| ✅ **COMPLETE** | Large file decomposition | High | High | **DONE** | **Completed 2025-08-26** |
-| ✅ **COMPLETE** | Critical metrics mathematics | Medium | Critical | **DONE** | **Completed 2025-08-26** |
+| ✅ **COMPLETE** | CLI migration & legacy removal | High | Critical | **DONE** | **Completed 2025-08-28** |
+| ✅ **COMPLETE** | Keypoint source separation | High | Critical | **DONE** | **Completed 2025-08-27** |
+| ✅ **COMPLETE** | True mAP pipeline integration | Medium | Critical | **DONE** | **Completed 2025-08-26** |
 | ✅ **COMPLETE** | True IR-style mAP infrastructure | High | Critical | **DONE** | **Completed 2025-08-26** |
-| 🔧 **CURRENT** | True mAP pipeline integration | Medium | Critical | **In Progress** | **Next session** |
-| 🔧 HIGH | Test framework adoption | Medium | Medium | Pending | **Next month** |
-| 📈 MEDIUM | Configuration enhancement | Low | Low-Med | Pending | **Next quarter** |
+| ✅ **COMPLETE** | Critical metrics mathematics | Medium | Critical | **DONE** | **Completed 2025-08-26** |
+| ✅ **COMPLETE** | Large file decomposition | High | High | **DONE** | **Completed 2025-08-26** |
+| ✅ **COMPLETE** | Legacy database cleanup | Low | High | **DONE** | **Completed 2025-08-19** |
+| 🔧 **CURRENT** | Test framework modernization | Medium | Medium | **Ready** | **Current session** |
+| 📈 MEDIUM | Configuration enhancement | Low | Low-Med | Partially done | **Next quarter** |
 | 📈 MEDIUM | Error handling improvement | Medium | Low-Med | Pending | **Gradual improvement** |
-| 🎨 LOW | Documentation expansion | High | Low | Pending | **Long-term goal** |
+| 🎨 LOW | Documentation expansion | High | Low | In progress | **Long-term goal** |
 
 ### **📊 CODE QUALITY METRICS**
 

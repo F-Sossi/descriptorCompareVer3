@@ -91,6 +91,21 @@ else()
     message(STATUS "SQLite3 found: ${SQLite3_VERSION}")
 endif()
 
+# Google Test - for modern unit testing
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(GTEST gtest)
+    pkg_check_modules(GTEST_MAIN gtest_main)
+endif()
+
+if(GTEST_FOUND AND GTEST_MAIN_FOUND)
+    message(STATUS "Google Test found: using system packages")
+    set(GTEST_LIBRARIES ${GTEST_LIBRARIES})
+    set(GTEST_MAIN_LIBRARIES ${GTEST_MAIN_LIBRARIES})
+    set(GTEST_INCLUDE_DIRS ${GTEST_INCLUDE_DIRS})
+else()
+    message(STATUS "Google Test not found - legacy tests will continue to use manual main() functions")
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -103,6 +118,11 @@ if(USE_CONAN)
         include_directories(${TBB_INCLUDE_DIRS})
     endif()
     include_directories(${SQLite3_INCLUDE_DIRS})
+endif()
+
+# Add Google Test include directories if found
+if(GTEST_FOUND)
+    include_directories(${GTEST_INCLUDE_DIRS})
 endif()
 
 # Link directories
@@ -231,15 +251,74 @@ function(create_test_if_exists test_source test_name)
     endif()
 endfunction()
 
+# Helper function to create Google Test executables
+function(create_gtest_if_exists test_source test_name)
+    if(NOT GTEST_FOUND OR NOT GTEST_MAIN_FOUND)
+        message(STATUS "Google Test not available - skipping: ${test_name}")
+        return()
+    endif()
+    
+    if(EXISTS "${CMAKE_SOURCE_DIR}/${test_source}")
+        add_executable(${test_name} ${test_source})
+        target_compile_features(${test_name} PRIVATE cxx_std_17)
+        
+        # Link Google Test libraries
+        target_link_libraries(${test_name} ${GTEST_LIBRARIES} ${GTEST_MAIN_LIBRARIES})
+        
+        # Link libraries based on test type (same logic as legacy tests)
+        if(${test_name} MATCHES "database")
+            if(TARGET thesis_database)
+                target_link_libraries(${test_name} thesis_database)
+            endif()
+            if(${test_name} MATCHES "integration" AND NOT ${test_name} MATCHES "simple")
+                target_link_libraries(${test_name} keypoints)
+                target_include_directories(${test_name} PRIVATE descriptor_compare keypoints)
+            endif()
+        elseif(${test_name} MATCHES "interface|headers")
+            target_link_libraries(${test_name} keypoints)
+            target_include_directories(${test_name} PRIVATE keypoints descriptor_compare)
+        endif()
+        
+        # Add to CTest
+        add_test(NAME ${test_name} COMMAND ${test_name})
+        
+        # Set test labels with gtest suffix and proper working directory
+        if(${test_name} MATCHES "database")
+            set_tests_properties(${test_name} PROPERTIES LABELS "database;stage5;gtest" TIMEOUT 60)
+        elseif(${test_name} MATCHES "interface|headers")
+            set_tests_properties(${test_name} PROPERTIES LABELS "interface;stage3;gtest" TIMEOUT 60)
+        elseif(${test_name} MATCHES "types")
+            set_tests_properties(${test_name} PROPERTIES LABELS "types;stage2;gtest" TIMEOUT 60)
+        elseif(${test_name} MATCHES "yaml|config")
+            set_tests_properties(${test_name} PROPERTIES 
+                LABELS "config;stage4;gtest" 
+                TIMEOUT 60 
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        else()
+            set_tests_properties(${test_name} PROPERTIES LABELS "gtest" TIMEOUT 60)
+        endif()
+        
+        message(STATUS "Google Test configured: ${test_name}")
+    else()
+        message(STATUS "Google Test source not found (skipping): ${test_source}")
+    endif()
+endfunction()
+
 # Create all test executables (only if files exist)
 create_test_if_exists("tests/unit/simple_interface_test.cpp" "simple_interface_test")
 create_test_if_exists("tests/unit/test_yaml_config.cpp" "test_yaml_config")
+
+# Google Test configuration tests
+create_gtest_if_exists("tests/unit/test_yaml_config_gtest.cpp" "test_yaml_config_gtest")
 
 # Database tests (in database subdirectory)
 create_test_if_exists("tests/unit/database/test_database.cpp" "test_database")
 create_test_if_exists("tests/unit/database/test_database_integration.cpp" "test_database_integration")
 create_test_if_exists("tests/unit/database/test_database_integration_simple.cpp" "test_database_integration_simple")
 create_test_if_exists("tests/unit/database/test_database_standalone.cpp" "test_database_standalone")
+
+# Google Test database tests
+create_gtest_if_exists("tests/unit/database/test_database_gtest.cpp" "test_database_gtest")
 
 # Custom targets for running test groups
 add_custom_target(run_all_tests
@@ -267,6 +346,11 @@ add_custom_target(run_stage_tests
     COMMENT "Running all stage tests"
 )
 
+add_custom_target(run_gtest_tests
+    COMMAND ${CMAKE_CTEST_COMMAND} -L gtest --output-on-failure --verbose
+    COMMENT "Running Google Test framework tests only"
+)
+
 # Install rules - descriptor_compare removed, use experiment_runner instead
 install(DIRECTORY config/ DESTINATION share/descriptor_compare/config
         FILES_MATCHING PATTERN "*.yaml" PATTERN "*.yml")
@@ -286,7 +370,12 @@ message(STATUS "  TBB: ${TBB_FOUND}")
 message(STATUS "  SQLite3: ${SQLite3_FOUND}")
 message(STATUS "")
 message(STATUS "Testing:")
-message(STATUS "  Available test targets: run_all_tests, run_database_tests, run_interface_tests, run_config_tests")
+message(STATUS "  Available test targets: run_all_tests, run_database_tests, run_interface_tests, run_config_tests, run_gtest_tests")
+if(GTEST_FOUND AND GTEST_MAIN_FOUND)
+    message(STATUS "  Google Test: ENABLED - Modern test framework available")
+else()
+    message(STATUS "  Google Test: DISABLED - Using legacy manual tests")
+endif()
 message(STATUS "")
 
 # ================================
