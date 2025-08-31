@@ -29,6 +29,20 @@ namespace thesis_project::config {
             // Map other descriptor parameters
             old_config.descriptorOptions.normType = desc_config.params.norm_type;
             old_config.descriptorOptions.scales = desc_config.params.scales;
+            if (!desc_config.params.scale_weights.empty()) {
+                old_config.descriptorOptions.scale_weights = desc_config.params.scale_weights;
+            }
+            // Procedural weighting mapping
+            old_config.descriptorOptions.scale_weight_sigma = desc_config.params.scale_weight_sigma;
+            switch (desc_config.params.scale_weighting) {
+                case ScaleWeighting::GAUSSIAN:
+                    old_config.descriptorOptions.scale_weighting_mode = 2; break;
+                case ScaleWeighting::TRIANGULAR:
+                    old_config.descriptorOptions.scale_weighting_mode = 1; break;
+                case ScaleWeighting::UNIFORM:
+                default:
+                    old_config.descriptorOptions.scale_weighting_mode = 0; break;
+            }
             
             // Color/BW image type and descriptor color space
             if (desc_config.params.use_color) {
@@ -140,6 +154,17 @@ namespace thesis_project::config {
         desc_config.params.use_color = (old_config.descriptorOptions.imageType == ::COLOR);
         desc_config.params.norm_type = old_config.descriptorOptions.normType;
         desc_config.params.scales = old_config.descriptorOptions.scales;
+        if (!old_config.descriptorOptions.scale_weights.empty()) {
+            desc_config.params.scale_weights = old_config.descriptorOptions.scale_weights;
+        }
+        // Procedural weighting mapping
+        desc_config.params.scale_weight_sigma = old_config.descriptorOptions.scale_weight_sigma;
+        switch (old_config.descriptorOptions.scale_weighting_mode) {
+            case 2: desc_config.params.scale_weighting = ScaleWeighting::GAUSSIAN; break;
+            case 1: desc_config.params.scale_weighting = ScaleWeighting::TRIANGULAR; break;
+            case 0:
+            default: desc_config.params.scale_weighting = ScaleWeighting::UNIFORM; break;
+        }
         
         // Stacking parameters
         if (desc_config.params.pooling == PoolingStrategy::STACKING) {

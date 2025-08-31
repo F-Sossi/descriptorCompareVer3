@@ -5,8 +5,7 @@
 #include <vector>
 #include <memory>
 
-namespace thesis_project {
-namespace config {
+namespace thesis_project::config {
 
     /**
      * @brief Modern experiment configuration using Stage 2 types
@@ -60,7 +59,11 @@ namespace config {
 
         // Database configuration
         DatabaseParams database;
+
+        // Migration toggles (Stage 7)
+        struct Migration {
+            bool use_new_interface = false; // Opt-in to ProcessorBridge new interface when supported
+        } migration;
     };
 
-} // namespace config
-} // namespace thesis_project
+}

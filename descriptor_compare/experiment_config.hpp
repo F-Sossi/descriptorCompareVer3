@@ -99,6 +99,9 @@ struct DescriptorOptions {
     DescriptorColorSpace descriptorColorSpace2 = D_BW; ///< Descriptor color space
     int normType = cv::NORM_L1; ///< Normalization type
     std::vector<float> scales = {1.0f, 1.5f, 2.0f}; ///< Scales used for domain size pooling
+    std::vector<float> scale_weights; ///< Optional weights aligned with scales for weighted DSP pooling
+    int scale_weighting_mode = 0; ///< 0=uniform, 1=triangular, 2=gaussian
+    float scale_weight_sigma = 0.15f; ///< Sigma for gaussian weighting (log-space) or radius proxy for triangular
     bool recordKeypoints = false; ///< Flag to enable/disable recording keypoints
     bool recordDescriptors = false; ///< Flag to enable/disable recording descriptors
     bool UseLockedInKeypoints = true; ///< Flag to enable/disable locked-in keypoints

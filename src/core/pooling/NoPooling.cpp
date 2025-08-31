@@ -1,6 +1,7 @@
 #include "NoPooling.hpp"
 #include "descriptor_compare/experiment_config.hpp"
 #include "keypoints/VanillaSIFT.h"
+#include "src/interfaces/IDescriptorExtractor.hpp"
 
 namespace thesis_project::pooling {
 
@@ -29,6 +30,16 @@ cv::Mat NoPooling::computeDescriptors(
     }
     
     return descriptors;
+}
+
+// New interface overload: delegate to extractor
+cv::Mat NoPooling::computeDescriptors(
+    const cv::Mat& image,
+    const std::vector<cv::KeyPoint>& keypoints,
+    thesis_project::IDescriptorExtractor& extractor,
+    const experiment_config& /*config*/
+) {
+    return extractor.extract(image, keypoints);
 }
 
 } // namespace thesis_project::pooling

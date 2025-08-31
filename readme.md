@@ -373,6 +373,18 @@ descriptors:
   - name: "sift_with_dsp"
     type: "sift"
     pooling: "domain_size_pooling"
+    # Optional DSP parameters
+    scales: [0.75, 1.0, 1.25]           # domain size multipliers (keypoint-size scaling)
+    # Choose one of the following weighting modes:
+    # 1) Explicit weights aligned with scales
+    # scale_weights: [1.0, 2.0, 1.0]
+    # 2) Procedural weighting
+    scale_weighting: gaussian            # gaussian|triangular|uniform
+    scale_weight_sigma: 0.15            # sigma in log-space (triangular uses as radius proxy)
+    # Normalization/RootSIFT stages (row-wise)
+    # normalize_before_pooling: false
+    # normalize_after_pooling: true
+    # rooting options: R_BEFORE_POOLING or R_AFTER_POOLING (via legacy or CLI fields)
 
 evaluation:
   matching:
@@ -392,6 +404,11 @@ database:
 
 **Available descriptor types:** `sift`, `rgbsift`, `vsift`, `honc`  
 **Available pooling strategies:** `none`, `domain_size_pooling`, `stacking`
+
+DSP-SIFT (Domain Size Pooling):
+- Uses keypoint-size scaling over `scales` on the original image (no image resizing).
+- Pools per-scale descriptors by weighted average: explicit `scale_weights` or procedural `scale_weighting` + `scale_weight_sigma`.
+- Normalizes per row (L2) by default after pooling; RootSIFT supported (L1 then sqrt) before/after.
 
 #### Legacy Configuration Options
 

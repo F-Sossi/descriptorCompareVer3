@@ -5,9 +5,13 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <stdexcept>
 
 // Forward declaration to avoid circular dependency
 struct experiment_config;
+
+// Forward declare new interface extractor to avoid heavy includes
+namespace thesis_project { class IDescriptorExtractor; }
 
 namespace thesis_project::pooling {
 
@@ -37,6 +41,17 @@ public:
         const cv::Ptr<cv::Feature2D>& detector,
         const experiment_config& config
     ) = 0;
+
+    // Optional overload for the Stage 7 new interface
+    virtual cv::Mat computeDescriptors(
+        const cv::Mat& image,
+        const std::vector<cv::KeyPoint>& keypoints,
+        thesis_project::IDescriptorExtractor& extractor,
+        const experiment_config& /*config*/
+    )
+    {
+        throw std::runtime_error("PoolingStrategy new interface path not implemented for this strategy");
+    }
 
     /**
      * @brief Get human-readable name of the pooling strategy

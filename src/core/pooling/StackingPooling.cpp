@@ -2,6 +2,7 @@
 #include "descriptor_compare/experiment_config.hpp"
 #include "keypoints/VanillaSIFT.h"
 #include <iostream>
+#include "src/core/pooling/pooling_utils.hpp"
 
 namespace thesis_project::pooling {
 
@@ -21,12 +22,12 @@ cv::Mat StackingPooling::computeDescriptors(
     cv::Mat image1 = prepareImageForColorSpace(image, config.descriptorOptions.descriptorColorSpace);
     cv::Mat image2 = prepareImageForColorSpace(image, config.descriptorOptions.descriptorColorSpace2);
 
-    // Compute first descriptor
-    std::vector<cv::KeyPoint> keypoints1 = keypoints; // Copy to avoid modification
+    // Compute first descriptor (capture potentially adjusted keypoints)
+    std::vector<cv::KeyPoint> keypoints1 = keypoints;
     cv::Mat descriptor1 = computeDescriptorsWithDetector(image1, keypoints1, detector);
 
-    // Compute second descriptor  
-    std::vector<cv::KeyPoint> keypoints2 = keypoints; // Copy to avoid modification
+    // Compute second descriptor  (capture potentially adjusted keypoints)
+    std::vector<cv::KeyPoint> keypoints2 = keypoints;
     cv::Mat descriptor2 = computeDescriptorsWithDetector(image2, keypoints2, config.detector2);
 
     // Validate descriptors before concatenation
@@ -39,16 +40,52 @@ cv::Mat StackingPooling::computeDescriptors(
         return cv::Mat();
     }
     
-    // Check dimensional compatibility
+    // Check keypoint alignment and dimensional compatibility
     if (descriptor1.rows != descriptor2.rows) {
-        std::cerr << "[ERROR] Descriptor row mismatch: " << descriptor1.rows 
+        std::cerr << "[ERROR] Descriptor row mismatch: " << descriptor1.rows
                   << " vs " << descriptor2.rows << std::endl;
         return cv::Mat();
+    }
+    // Enforce that keypoints correspond (within tolerance)
+    const double eps = 0.5; // pixels
+    if (keypoints1.size() != keypoints2.size()) {
+        std::cerr << "[ERROR] Keypoint count mismatch in stacking: " << keypoints1.size()
+                  << " vs " << keypoints2.size() << std::endl;
+        return cv::Mat();
+    }
+    for (size_t i = 0; i < keypoints1.size(); ++i) {
+        if (std::abs(keypoints1[i].pt.x - keypoints2[i].pt.x) > eps ||
+            std::abs(keypoints1[i].pt.y - keypoints2[i].pt.y) > eps) {
+            std::cerr << "[ERROR] Keypoint misalignment at row " << i << " in stacking" << std::endl;
+            return cv::Mat();
+        }
+    }
+
+    using namespace thesis_project::pooling::utils;
+    // BEFORE pooling normalization/rooting per component
+    if (config.descriptorOptions.normalizationStage == BEFORE_POOLING) {
+        normalizeRows(descriptor1, config.descriptorOptions.normType);
+        normalizeRows(descriptor2, config.descriptorOptions.normType);
+    }
+    if (config.descriptorOptions.rootingStage == R_BEFORE_POOLING) {
+        normalizeRows(descriptor1, cv::NORM_L1);
+        normalizeRows(descriptor2, cv::NORM_L1);
+        applyRooting(descriptor1);
+        applyRooting(descriptor2);
     }
 
     // Horizontally concatenate descriptors
     cv::Mat stackedDescriptor;
     cv::hconcat(descriptor1, descriptor2, stackedDescriptor);
+
+    // AFTER pooling normalization/rooting on concatenated vector
+    if (config.descriptorOptions.rootingStage == R_AFTER_POOLING) {
+        normalizeRows(stackedDescriptor, cv::NORM_L1);
+        applyRooting(stackedDescriptor);
+    }
+    if (config.descriptorOptions.normalizationStage == AFTER_POOLING) {
+        normalizeRows(stackedDescriptor, config.descriptorOptions.normType);
+    }
 
     return stackedDescriptor;
 }
@@ -69,19 +106,18 @@ cv::Mat StackingPooling::prepareImageForColorSpace(const cv::Mat& sourceImage, i
 
 cv::Mat StackingPooling::computeDescriptorsWithDetector(
     const cv::Mat& image,
-    const std::vector<cv::KeyPoint>& keypoints,
+    std::vector<cv::KeyPoint>& keypoints,
     const cv::Ptr<cv::Feature2D>& detector
 ) const {
     cv::Mat descriptors;
-    std::vector<cv::KeyPoint> keypointsCopy = keypoints;
-    
+    // detector->compute may adjust keypoints in-place
     // Handle VanillaSIFT vs standard Feature2D interface
     if (auto vanillaSift = std::dynamic_pointer_cast<VanillaSIFT>(detector)) {
-        vanillaSift->compute(image, keypointsCopy, descriptors);
+        vanillaSift->compute(image, keypoints, descriptors);
     } else {
-        detector->compute(image, keypointsCopy, descriptors);
+        detector->compute(image, keypoints, descriptors);
     }
-    
+
     return descriptors;
 }
 

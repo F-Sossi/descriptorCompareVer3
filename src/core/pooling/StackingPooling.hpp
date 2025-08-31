@@ -61,7 +61,7 @@ private:
      */
     cv::Mat computeDescriptorsWithDetector(
         const cv::Mat& image,
-        const std::vector<cv::KeyPoint>& keypoints,
+        std::vector<cv::KeyPoint>& keypoints,
         const cv::Ptr<cv::Feature2D>& detector
     ) const;
 };

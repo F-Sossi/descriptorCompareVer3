@@ -57,6 +57,12 @@ namespace config {
         if (root["database"]) {
             parseDatabase(root["database"], config.database);
         }
+        if (root["migration"]) {
+            parseMigration(root["migration"], config.migration);
+        }
+        
+        // Basic validation
+        validate(config);
         
         return config;
     }
@@ -123,6 +129,8 @@ namespace config {
         descriptors.clear();
         for (const auto& desc_node : node) {
             ExperimentConfig::DescriptorConfig desc_config;
+            // Initialize type to NONE for validation clarity
+            desc_config.type = DescriptorType::NONE;
             
             if (desc_node["name"]) {
                 desc_config.name = desc_node["name"].as<std::string>();
@@ -142,6 +150,21 @@ namespace config {
                 for (const auto& scale : desc_node["scales"]) {
                     desc_config.params.scales.push_back(scale.as<float>());
                 }
+            }
+            if (desc_node["scale_weights"] && desc_node["scale_weights"].IsSequence()) {
+                desc_config.params.scale_weights.clear();
+                for (const auto& w : desc_node["scale_weights"]) {
+                    desc_config.params.scale_weights.push_back(w.as<float>());
+                }
+            }
+            if (desc_node["scale_weighting"]) {
+                std::string wt = desc_node["scale_weighting"].as<std::string>();
+                if (wt == "gaussian") desc_config.params.scale_weighting = ScaleWeighting::GAUSSIAN;
+                else if (wt == "triangular") desc_config.params.scale_weighting = ScaleWeighting::TRIANGULAR;
+                else desc_config.params.scale_weighting = ScaleWeighting::UNIFORM;
+            }
+            if (desc_node["scale_weight_sigma"]) {
+                desc_config.params.scale_weight_sigma = desc_node["scale_weight_sigma"].as<float>();
             }
             
             if (desc_node["normalize_before_pooling"]) {
@@ -172,6 +195,47 @@ namespace config {
             }
             
             descriptors.push_back(desc_config);
+        }
+    }
+
+    void YAMLConfigLoader::validate(const ExperimentConfig& config) {
+        // Required dataset path
+        if (config.dataset.path.empty()) {
+            throw std::runtime_error("YAML validation error: dataset.path is required");
+        }
+
+        // Must have at least one descriptor
+        if (config.descriptors.empty()) {
+            throw std::runtime_error("YAML validation error: descriptors list must not be empty");
+        }
+
+        // Validate each descriptor
+        for (const auto& d : config.descriptors) {
+            if (d.name.empty()) {
+                throw std::runtime_error("YAML validation error: descriptor.name is required");
+            }
+            if (d.type == DescriptorType::NONE) {
+                throw std::runtime_error("YAML validation error: descriptor.type is required for " + d.name);
+            }
+            if (d.params.stacking_weight < 0.0f || d.params.stacking_weight > 1.0f) {
+                throw std::runtime_error("YAML validation error: stacking_weight must be in [0,1] for " + d.name);
+            }
+        }
+
+        // Keypoint parameter sanity checks
+        if (config.keypoints.params.max_features < 0) {
+            throw std::runtime_error("YAML validation error: keypoints.max_features must be >= 0");
+        }
+        if (config.keypoints.params.num_octaves <= 0) {
+            throw std::runtime_error("YAML validation error: keypoints.num_octaves must be > 0");
+        }
+        if (config.keypoints.params.sigma <= 0.0f) {
+            throw std::runtime_error("YAML validation error: keypoints.sigma must be > 0");
+        }
+
+        // Evaluation threshold typical range [0,1]
+        if (config.evaluation.params.match_threshold < 0.0f || config.evaluation.params.match_threshold > 1.0f) {
+            throw std::runtime_error("YAML validation error: evaluation.matching.threshold must be in [0,1]");
         }
     }
     
@@ -242,6 +306,10 @@ namespace config {
         if (node["save_descriptors"]) database.save_descriptors = node["save_descriptors"].as<bool>();
         if (node["save_matches"]) database.save_matches = node["save_matches"].as<bool>();
         if (node["save_visualizations"]) database.save_visualizations = node["save_visualizations"].as<bool>();
+    }
+
+    void YAMLConfigLoader::parseMigration(const YAML::Node& node, ExperimentConfig::Migration& migration) {
+        if (node["use_new_interface"]) migration.use_new_interface = node["use_new_interface"].as<bool>();
     }
     
     // Type conversion helper methods

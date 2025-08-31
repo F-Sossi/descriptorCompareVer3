@@ -26,6 +26,14 @@ public:
         const experiment_config& config
     ) override;
 
+    // New interface overload: pool using modern extractor API
+    cv::Mat computeDescriptors(
+        const cv::Mat& image,
+        const std::vector<cv::KeyPoint>& keypoints,
+        thesis_project::IDescriptorExtractor& extractor,
+        const experiment_config& config
+    ) override;
+
     std::string getName() const override {
         return "DomainSizePooling";
     }

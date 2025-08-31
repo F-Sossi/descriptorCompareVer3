@@ -1,10 +1,9 @@
 #pragma once
-
 #include "ExperimentConfig.hpp"
-#include "../../../descriptor_compare/experiment_config.hpp"
+#include "descriptor_compare/experiment_config.hpp"
 
-namespace thesis_project {
-namespace config {
+
+namespace thesis_project::config {
 
     /**
      * @brief Bridge between new YAML configuration and existing experiment_config
@@ -39,5 +38,5 @@ namespace config {
             size_t descriptor_index = 0);
     };
 
-} // namespace config
-} // namespace thesis_project
+} // namespace thesis_project::config
+

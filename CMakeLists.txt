@@ -277,6 +277,56 @@ function(create_gtest_if_exists test_source test_name)
         elseif(${test_name} MATCHES "interface|headers")
             target_link_libraries(${test_name} keypoints)
             target_include_directories(${test_name} PRIVATE keypoints descriptor_compare)
+        elseif(${test_name} MATCHES "stage7")
+            # Stage 7 tests need OpenCV
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES})
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS})
+            
+            # Stage 7 migration tests need additional dependencies
+            if(${test_name} MATCHES "migration")
+                target_link_libraries(${test_name} thesis_migration keypoints)
+                target_include_directories(${test_name} PRIVATE 
+                    src 
+                    keypoints 
+                    descriptor_compare
+                )
+                # Also add pooling and legacy config sources used by migration path
+                target_sources(${test_name} PRIVATE 
+                    src/core/pooling/PoolingFactory.cpp
+                    src/core/pooling/NoPooling.cpp
+                    src/core/pooling/DomainSizePooling.cpp
+                    src/core/pooling/StackingPooling.cpp
+                    src/core/matching/BruteForceMatching.cpp
+                    src/core/matching/MatchingFactory.cpp
+                    descriptor_compare/experiment_config.cpp
+                    descriptor_compare/processor_utils.cpp
+                )
+            endif()
+        elseif(${test_name} MATCHES "metrics|true_average_precision")
+            # Metrics tests need OpenCV for TrueAveragePrecision.hpp and the implementation
+            target_sources(${test_name} PRIVATE src/core/metrics/TrueAveragePrecision.cpp)
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES})
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src)
+        elseif(${test_name} MATCHES "matching")
+            # Matching tests need matching sources and OpenCV
+            target_sources(${test_name} PRIVATE 
+                src/core/matching/BruteForceMatching.cpp
+                src/core/matching/MatchingFactory.cpp
+                descriptor_compare/experiment_config.cpp
+            )
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src descriptor_compare keypoints)
+        elseif(${test_name} MATCHES "pooling")
+            # Pooling tests need OpenCV, keypoints, and pooling source files
+            target_sources(${test_name} PRIVATE 
+                src/core/pooling/PoolingFactory.cpp
+                src/core/pooling/NoPooling.cpp
+                src/core/pooling/DomainSizePooling.cpp
+                src/core/pooling/StackingPooling.cpp
+                descriptor_compare/experiment_config.cpp
+            )
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
         endif()
         
         # Add to CTest
@@ -304,21 +354,131 @@ function(create_gtest_if_exists test_source test_name)
     endif()
 endfunction()
 
-# Create all test executables (only if files exist)
-create_test_if_exists("tests/unit/simple_interface_test.cpp" "simple_interface_test")
-create_test_if_exists("tests/unit/test_yaml_config.cpp" "test_yaml_config")
+# Legacy manual tests have been migrated to Google Test framework
+# All remaining manual test files use create_test_if_exists for backward compatibility
 
 # Google Test configuration tests
 create_gtest_if_exists("tests/unit/test_yaml_config_gtest.cpp" "test_yaml_config_gtest")
 
-# Database tests (in database subdirectory)
-create_test_if_exists("tests/unit/database/test_database.cpp" "test_database")
+# Google Test basic component tests
+create_gtest_if_exists("tests/unit/test_constants_gtest.cpp" "test_constants_gtest")
+create_gtest_if_exists("tests/unit/test_new_types_gtest.cpp" "test_new_types_gtest")
+create_gtest_if_exists("tests/unit/simple_interface_test_gtest.cpp" "simple_interface_test_gtest")
+
+# Google Test metrics calculation tests (Phase 1 comprehensive testing)
+create_gtest_if_exists("tests/unit/metrics/test_metrics_calculator_gtest.cpp" "test_metrics_calculator_gtest")
+create_gtest_if_exists("tests/unit/metrics/test_true_average_precision_gtest.cpp" "test_true_average_precision_gtest")
+create_gtest_if_exists("tests/unit/metrics/test_experiment_metrics_gtest.cpp" "test_experiment_metrics_gtest")
+
+# Google Test pooling strategy tests (Phase 2 comprehensive testing)
+create_gtest_if_exists("tests/unit/pooling/test_pooling_factory_gtest.cpp" "test_pooling_factory_gtest")
+create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_gtest.cpp" "test_domain_size_pooling_gtest")
+create_gtest_if_exists("tests/unit/pooling/test_stacking_pooling_gtest.cpp" "test_stacking_pooling_gtest")
+create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_weighted_gtest.cpp" "test_domain_size_pooling_weighted_gtest")
+create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_procedural_gtest.cpp" "test_domain_size_pooling_procedural_gtest")
+
+# Google Test matching factory tests
+create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "test_matching_factory_gtest")
+
+# Google Test descriptor factory tests
+create_gtest_if_exists("tests/unit/factories/test_descriptor_factory_gtest.cpp" "test_descriptor_factory_gtest")
+if(TARGET test_descriptor_factory_gtest)
+    target_sources(test_descriptor_factory_gtest PRIVATE descriptor_compare/experiment_config.cpp)
+    target_link_libraries(test_descriptor_factory_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# Google Test integration tests
+create_gtest_if_exists("tests/unit/integration/test_stage7_simple_gtest.cpp" "test_stage7_simple_gtest")
+# ProcessorBridgeFacade tests
+create_gtest_if_exists("tests/unit/integration/test_processor_bridge_facade_gtest.cpp" "test_processor_bridge_facade_gtest")
+if(TARGET test_processor_bridge_facade_gtest)
+    target_sources(test_processor_bridge_facade_gtest PRIVATE 
+        descriptor_compare/experiment_config.cpp
+        src/core/integration/ProcessorBridgeFacade.cpp
+        src/core/pooling/PoolingFactory.cpp
+        src/core/pooling/NoPooling.cpp
+        src/core/pooling/DomainSizePooling.cpp
+        src/core/pooling/StackingPooling.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        descriptor_compare/processor_utils.cpp
+    )
+    target_link_libraries(test_processor_bridge_facade_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_processor_bridge_facade_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
+# Note: test_stage7_migration_gtest removed due to complex linking dependencies
+# Use the working manual test_stage7_migration instead
+
+# Stage 7 migration-focused tests
+create_gtest_if_exists("tests/unit/integration/test_stage7_migration_parity_gtest.cpp" "test_stage7_migration_parity_gtest")
+create_gtest_if_exists("tests/unit/integration/test_stage7_migration_routing_gtest.cpp" "test_stage7_migration_routing_gtest")
+create_gtest_if_exists("tests/unit/integration/test_processor_utils_routing_gtest.cpp" "test_processor_utils_routing_gtest")
+if(TARGET test_processor_utils_routing_gtest)
+    target_sources(test_processor_utils_routing_gtest PRIVATE 
+        src/core/pooling/PoolingFactory.cpp
+        src/core/pooling/NoPooling.cpp
+        src/core/pooling/DomainSizePooling.cpp
+        src/core/pooling/StackingPooling.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        descriptor_compare/experiment_config.cpp
+        descriptor_compare/processor_utils.cpp
+    )
+    target_link_libraries(test_processor_utils_routing_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_processor_utils_routing_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# YAML loader + bridge tests (link loader/bridge and yaml-cpp)
+create_gtest_if_exists("tests/unit/config/test_yaml_loader_bridge_gtest.cpp" "test_yaml_loader_bridge_gtest")
+if(TARGET test_yaml_loader_bridge_gtest)
+    target_sources(test_yaml_loader_bridge_gtest PRIVATE 
+        src/core/config/YAMLConfigLoader.cpp
+        src/core/config/ConfigurationBridge.cpp
+        descriptor_compare/experiment_config.cpp
+    )
+    # OpenCV includes for types.hpp dependency
+    target_link_libraries(test_yaml_loader_bridge_gtest ${OpenCV_LIBRARIES} keypoints)
+    target_include_directories(test_yaml_loader_bridge_gtest PRIVATE ${OpenCV_INCLUDE_DIRS} keypoints)
+    # yaml-cpp
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(YAMLCPP yaml-cpp)
+    endif()
+    if(YAMLCPP_FOUND)
+        target_link_libraries(test_yaml_loader_bridge_gtest ${YAMLCPP_LIBRARIES})
+        target_include_directories(test_yaml_loader_bridge_gtest PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+    else()
+        target_link_libraries(test_yaml_loader_bridge_gtest yaml-cpp)
+    endif()
+    # Include core headers
+    target_include_directories(test_yaml_loader_bridge_gtest PRIVATE src include)
+endif()
+
+# Processor utils migration tests
+create_gtest_if_exists("tests/unit/integration/test_processor_utils_migration_gtest.cpp" "test_processor_utils_migration_gtest")
+if(TARGET test_processor_utils_migration_gtest)
+    target_sources(test_processor_utils_migration_gtest PRIVATE 
+        src/core/pooling/PoolingFactory.cpp
+        src/core/pooling/NoPooling.cpp
+        src/core/pooling/DomainSizePooling.cpp
+        src/core/pooling/StackingPooling.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        descriptor_compare/experiment_config.cpp
+        descriptor_compare/processor_utils.cpp
+    )
+    target_link_libraries(test_processor_utils_migration_gtest ${OpenCV_LIBRARIES} keypoints thesis_migration)
+    target_include_directories(test_processor_utils_migration_gtest PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
+endif()
+
+# Database tests (in database subdirectory) - legacy manual tests migrated to Google Test
 create_test_if_exists("tests/unit/database/test_database_integration.cpp" "test_database_integration")
-create_test_if_exists("tests/unit/database/test_database_integration_simple.cpp" "test_database_integration_simple")
-create_test_if_exists("tests/unit/database/test_database_standalone.cpp" "test_database_standalone")
 
 # Google Test database tests
 create_gtest_if_exists("tests/unit/database/test_database_gtest.cpp" "test_database_gtest")
+create_gtest_if_exists("tests/unit/database/test_database_integration_simple_gtest.cpp" "test_database_integration_simple_gtest")
+create_gtest_if_exists("tests/unit/database/test_database_standalone_gtest.cpp" "test_database_standalone_gtest")
 
 # Custom targets for running test groups
 add_custom_target(run_all_tests
@@ -451,7 +611,8 @@ if(BUILD_EXPERIMENT_CLI)
                        descriptor_compare/experiment_config.cpp
                        descriptor_compare/image_processor.cpp
                        descriptor_compare/processor_utils.cpp
-                       descriptor_compare/locked_in_keypoints.cpp)
+                       descriptor_compare/locked_in_keypoints.cpp
+                       src/core/integration/ProcessorBridgeFacade.cpp)
         
         target_compile_features(experiment_runner PRIVATE cxx_std_17)
         
@@ -474,6 +635,7 @@ if(BUILD_EXPERIMENT_CLI)
         # Link libraries
         target_link_libraries(experiment_runner
             keypoints
+            thesis_migration
             Boost::system
             Boost::filesystem
         )
@@ -556,6 +718,7 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
         # Link libraries
         target_link_libraries(keypoint_manager
             keypoints
+            thesis_migration
             thesis_database
             Boost::system
             Boost::filesystem
@@ -602,6 +765,7 @@ if(BUILD_INTERFACE_MIGRATION)
             src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
             src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
             src/core/integration/ProcessorBridge.cpp
+            src/core/integration/MigrationToggle.cpp
         )
 
         target_include_directories(thesis_migration PUBLIC
@@ -626,6 +790,14 @@ if(BUILD_INTERFACE_MIGRATION)
             add_executable(test_stage7_migration 
                 tests/unit/integration/test_stage7_migration.cpp
                 descriptor_compare/experiment_config.cpp
+                descriptor_compare/processor_utils.cpp
+                src/core/pooling/NoPooling.cpp
+                src/core/pooling/DomainSizePooling.cpp
+                src/core/pooling/StackingPooling.cpp
+                src/core/pooling/PoolingFactory.cpp
+                src/core/matching/BruteForceMatching.cpp
+                src/core/matching/MatchingFactory.cpp
+                src/core/integration/MigrationToggle.cpp
             )
             target_link_libraries(test_stage7_migration thesis_migration keypoints ${OpenCV_LIBRARIES})
             target_include_directories(test_stage7_migration PRIVATE
@@ -645,4 +817,31 @@ if(BUILD_INTERFACE_MIGRATION)
 else()
     message(STATUS "Interface migration disabled (use -DBUILD_INTERFACE_MIGRATION=ON to enable)")
 endif()
+# YAML negative validation tests
+create_gtest_if_exists("tests/unit/config/test_yaml_validation_errors_gtest.cpp" "test_yaml_validation_errors_gtest")
+if(TARGET test_yaml_validation_errors_gtest)
+    target_sources(test_yaml_validation_errors_gtest PRIVATE src/core/config/YAMLConfigLoader.cpp)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(YAMLCPP yaml-cpp)
+    endif()
+    if(YAMLCPP_FOUND)
+        target_link_libraries(test_yaml_validation_errors_gtest ${YAMLCPP_LIBRARIES})
+        target_include_directories(test_yaml_validation_errors_gtest PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+    else()
+        target_link_libraries(test_yaml_validation_errors_gtest yaml-cpp)
+    endif()
+    target_link_libraries(test_yaml_validation_errors_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_yaml_validation_errors_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+endif()
 
+# Configuration bridge roundtrip tests
+create_gtest_if_exists("tests/unit/config/test_configuration_bridge_roundtrip_gtest.cpp" "test_configuration_bridge_roundtrip_gtest")
+if(TARGET test_configuration_bridge_roundtrip_gtest)
+    target_sources(test_configuration_bridge_roundtrip_gtest PRIVATE 
+        src/core/config/ConfigurationBridge.cpp
+        descriptor_compare/experiment_config.cpp
+    )
+    target_link_libraries(test_configuration_bridge_roundtrip_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_configuration_bridge_roundtrip_gtest PRIVATE src include keypoints ${OpenCV_INCLUDE_DIRS})
+endif()

@@ -31,7 +31,60 @@
 
 **Key Point**: These wrapper files are **NOT DEAD CODE** - they're part of the planned Stage 7 migration to modern interfaces, but the main pipeline continues to use the working factory pattern system.
 
+### 2025-08-29 — Incremental Stage 7 Integration (Completed)
+
+- Implemented ProcessorBridge legacy fallback using existing `processor_utils` and `PoolingFactory`.
+- Added migration toggle and wiring:
+  - New `MigrationToggle` (global, thread-safe) and `ProcessorBridgeFacade` for safe CLI integration.
+  - YAML support: `migration.use_new_interface` parsed by `YAMLConfigLoader` and applied by `experiment_runner`.
+  - Guarded routing in `processor_utils` for NoPooling: when toggle is ON and descriptor is supported, descriptor extraction uses wrappers via ProcessorBridge; falls back on error.
+- Pooling support for new interface:
+  - Added optional `IDescriptorExtractor` overload in `PoolingStrategy` (default throws).
+  - Implemented in `NoPooling` to delegate to `extractor.extract(...)`.
+- Parity validated for locked-in SIFT:
+  - Created configs `sift_locked_migration.yaml` (new path) and used existing `sift_baseline.yaml` (legacy).
+  - Results are identical (MAP and P@K) for locked-in SIFT + NoPooling.
+- Added a migration config for independent detection `sift_baseline_migration.yaml` (routes through wrappers, expectedly lower metrics).
+
+Outcome: Safe opt-in Stage 7 path for SIFT/RGBSIFT with NoPooling, with proven parity under locked-in evaluation. Legacy pipeline remains default.
+
 ---
+
+### 2025-08-31 — DSP-SIFT + Test Coverage Update (Completed)
+
+Implementation improvements
+- DSP-SIFT core: switched to keypoint-size scaling on original image; pool by averaging (or weighted average) across scales; row-wise normalization and RootSIFT supported before/after pooling.
+- Weighted pooling: added explicit `scale_weights` support and procedural weighting (`scale_weighting: gaussian|triangular|uniform` + `scale_weight_sigma`). Gaussian weights computed in log-space around α=1.0; triangular linearly tapers.
+- Shape safety: enforce identical rows/cols/types for all per-scale descriptors; bail cleanly on inconsistency.
+- Utilities: added row-wise normalization/rooting helpers.
+- Stacking: enforce keypoint alignment (within ε), add normalization/rooting before/after concatenation.
+- Stage 7 DSP: added new-interface overload in DomainSizePooling; ready for routing once enabled.
+
+Configuration + docs
+- YAML loader: parses `descriptors[].scale_weights`, `scale_weighting`, `scale_weight_sigma`.
+- Bridge mapping: propagates `scale_weights` and procedural weighting fields between new/old configs.
+- Sample config: `config/experiments/sift_dsp_gaussian.yaml` demonstrating gaussian weighting.
+- Docs: `docs/pooling_semantics.md` expanded with weighted pooling details; `readme.md` YAML examples updated.
+
+New test suites (all passing)
+- Pooling
+  - `test_domain_size_pooling_gtest`: average pooling equivalence; L2/RootSIFT semantics; invalid scales guarded.
+  - `test_domain_size_pooling_weighted_gtest`: explicit weights match manual weighted average.
+  - `test_domain_size_pooling_procedural_gtest`: gaussian small-σ ≈ base-scale; triangular matches manual.
+  - `test_stacking_pooling_gtest`: dimensionality, L2 idempotence; deterministic negative (missing secondary detector).
+- Factories
+  - `test_matching_factory_gtest`: createStrategy/createFromConfig; exceptions; availability list.
+  - `test_descriptor_factory_gtest`: create/tryCreate/isSupported/getSupportedTypes for SIFT/RGBSIFT; unsupported types throw/null.
+- Stage 7 integration
+  - `test_processor_bridge_facade_gtest`: `isNewInterfaceSupported` flags; tolerant smoke run.
+  - `test_processor_utils_routing_gtest`: migration toggle routing on supported/unsupported descriptors.
+- Config/bridge
+  - `test_yaml_loader_bridge_gtest`: YAML → ExperimentConfig mapping sanity.
+  - `test_yaml_validation_errors_gtest`: defaults + validation errors (empty descriptors, invalid stacking weight, invalid keypoint params, OOR matching threshold).
+  - `test_configuration_bridge_roundtrip_gtest`: Old ↔ New round-trip for key fields.
+
+Outcome: DSP-SIFT is robust and configurable (weighted pooling), Stacking is safer with alignment and normalization, and test coverage now spans pooling, factories, Stage 7 facade/routing, YAML validation, and configuration bridging (26 tests total; all green).
+
 
 ## 🔍 COMPREHENSIVE CODE REVIEW FINDINGS (2025-08-18)
 
@@ -156,12 +209,23 @@ After systematic review of all project files, here are the prioritized refactori
   - **Research Standards**: Full IR-style evaluation methodology implemented
 - **Impact**: Critical - enables proper research comparison with standard evaluation metrics
 
-#### **6. Test Framework Modernization**
-- **Current**: 782 lines using manual main() functions with basic assertions
-- **Issues**: No test framework, manual success/failure checking, limited organization
-- **Recommended**: Adopt Google Test or Catch2 framework
-- **Benefits**: Test fixtures, parameterized tests, better assertions, CI/CD integration
-- **Priority**: Medium - would improve test quality and coverage
+#### **6. Test Framework Modernization - COMPLETED ✅ (2025-08-30)**
+- **Problem**: 782 lines using manual main() functions with basic assertions, no proper test framework
+- **Solution**: Complete migration to Google Test framework with enhanced test organization
+- **Implementation**: ✅
+  - **New Google Test Files**: 4 comprehensive test suites covering constants, types, interfaces, and Stage 7 integration
+  - **Enhanced CMake Integration**: Added OpenCV support for Stage 7 tests, fixed cache generation issues
+  - **Comprehensive Test Coverage**: 33 total tests across 6 Google Test suites (constants, types, interfaces, YAML, database, Stage 7)
+  - **Test Organization**: Proper fixtures, parameterized tests, test labels, and timeout configuration
+  - **Backward Compatibility**: Manual tests preserved alongside modern Google Test versions
+- **Features**: ✅
+  - **Test Fixtures**: SetUp/TearDown methods for consistent test environment
+  - **Parameterized Tests**: Data-driven testing for configuration files and enum validation
+  - **Better Assertions**: Detailed failure messages with context information
+  - **CI/CD Integration**: CTest integration with labeled test groups for selective execution
+  - **OpenCV Integration**: Stage 7 tests include full OpenCV functionality validation
+- **Results**: All 33 tests passing, modern test framework ready for continuous integration
+- **Impact**: Critical - enables reliable automated testing and significantly improves code quality assurance
 
 ### **📈 MEDIUM PRIORITY IMPROVEMENTS**
 
@@ -237,10 +301,121 @@ After systematic review of all project files, here are the prioritized refactori
 | ✅ **COMPLETE** | Critical metrics mathematics | Medium | Critical | **DONE** | **Completed 2025-08-26** |
 | ✅ **COMPLETE** | Large file decomposition | High | High | **DONE** | **Completed 2025-08-26** |
 | ✅ **COMPLETE** | Legacy database cleanup | Low | High | **DONE** | **Completed 2025-08-19** |
-| 🔧 **CURRENT** | Test framework modernization | Medium | Medium | **Ready** | **Current session** |
+| ✅ **COMPLETE** | Test framework modernization | Medium | Medium | **DONE** | **Completed 2025-08-30** |
+| ✅ **COMPLETE** | Stage 7 minimal integration (NoPooling) | Medium | High | **DONE** | **Completed 2025-08-29** |
+| ✅ **COMPLETE** | YAML validation + cleanup | Low | Medium | **DONE** | **Completed 2025-08-29** |
+
+### **🧪 NEXT PHASE: COMPREHENSIVE TEST SUITE EXPANSION**
+
+| Priority | Component | Effort | Impact | Status | Timeline |
+|----------|-----------|--------|--------|--------|----------|
+| 🔬 **CRITICAL** | Metrics calculation testing | High | Critical | **DONE** | **Completed 2025-08-30** |
+| 🏭 **HIGH** | Factory pattern testing | Medium | High | **DONE** | **Completed 2025-08-31** |
+| 🔄 **HIGH** | Pooling strategy algorithms | High | High | **DONE** | **Completed 2025-08-31** |
+| 🎛️ **MEDIUM** | Configuration system testing | Medium | Medium | **DONE** | **Completed 2025-08-31** |
+| 🔧 **MEDIUM** | Integration layer testing | Medium | Medium | **DONE** | **Completed 2025-08-31** |
 | 📈 MEDIUM | Configuration enhancement | Low | Low-Med | Partially done | **Next quarter** |
 | 📈 MEDIUM | Error handling improvement | Medium | Low-Med | Pending | **Gradual improvement** |
 | 🎨 LOW | Documentation expansion | High | Low | In progress | **Long-term goal** |
+
+---
+
+## 🔬 **COMPREHENSIVE TEST SUITE EXPANSION PLAN**
+
+### **Phase 1: Metrics Calculation Testing (CRITICAL PRIORITY)**
+
+**Target Components**:
+- `src/core/metrics/MetricsCalculator.hpp` - Static utility functions for metrics aggregation
+- `src/core/metrics/TrueAveragePrecision.cpp` (153 lines) - Complex IR-style mAP calculations  
+- `src/core/metrics/ExperimentMetrics.hpp` - Metrics data structures and merge logic
+
+**Test Files to Create**:
+```
+tests/unit/metrics/
+├── test_metrics_calculator_gtest.cpp      # Aggregation and utility functions
+├── test_true_average_precision_gtest.cpp  # IR-style mAP computation algorithms
+└── test_experiment_metrics_gtest.cpp      # Data structures and merge operations
+```
+
+**Why Critical**: These components calculate research results. Mathematical errors invalidate research conclusions. Proper testing ensures research integrity.
+
+### **Phase 2: Factory Pattern Testing (HIGH PRIORITY)**
+
+**Target Components**:
+- `src/core/pooling/PoolingFactory.cpp` - Strategy creation and error handling
+- `src/core/matching/MatchingFactory.cpp` - Matcher creation logic
+- `src/core/descriptor/factories/DescriptorFactory.cpp` - Descriptor creation patterns
+
+**Test Files to Create**:
+```
+tests/unit/factories/
+├── test_pooling_factory_gtest.cpp     # Pooling strategy factory testing
+├── test_matching_factory_gtest.cpp    # Matching strategy factory testing  
+└── test_descriptor_factory_gtest.cpp  # Descriptor factory pattern testing
+```
+
+**Why High Priority**: Factory failures break entire processing pipelines. Proper error handling and strategy creation logic testing prevents runtime failures.
+
+### **Phase 3: Algorithm Implementation Testing (HIGH PRIORITY)**
+
+**Target Components**:
+- `src/core/pooling/DomainSizePooling.cpp` (87 lines) - Complex DSP algorithm implementation
+- `src/core/pooling/StackingPooling.cpp` (87 lines) - Stacking algorithm implementation
+- `src/core/pooling/NoPooling.cpp` (45 lines) - Baseline behavior verification
+
+**Test Files to Create**:
+```
+tests/unit/pooling/
+├── test_domain_size_pooling_gtest.cpp  # DSP algorithm correctness
+├── test_stacking_pooling_gtest.cpp     # Stacking algorithm correctness
+└── test_pooling_strategies_gtest.cpp   # Cross-strategy behavior verification
+```
+
+**Why High Priority**: Core computer vision algorithms that directly impact research results. Algorithm correctness testing ensures valid scientific results.
+
+### **Phase 4: Configuration System Testing (MEDIUM PRIORITY)**
+
+**Target Components**:
+- `src/core/config/YAMLConfigLoader.cpp` - YAML parsing and validation logic
+- `src/core/config/ConfigurationBridge.cpp` - Legacy/modern configuration translation
+
+**Test Files to Create**:
+```
+tests/unit/config/
+├── test_yaml_config_loader_gtest.cpp       # YAML parsing edge cases
+└── test_configuration_bridge_gtest.cpp     # Configuration translation logic
+```
+
+### **Phase 5: Integration Layer Testing (MEDIUM PRIORITY)**
+
+**Target Components**:
+- `src/core/integration/ProcessorBridgeFacade.cpp` - High-level integration API
+- `src/core/integration/MigrationToggle.cpp` - Stage 7 migration control logic
+
+**Test Files to Create**:
+```
+tests/unit/integration/
+├── test_processor_bridge_facade_gtest.cpp  # Integration API testing
+└── test_migration_toggle_gtest.cpp         # Migration control testing
+```
+
+### **🎯 Implementation Strategy**
+
+1. **One Component at a Time**: Complete each phase fully before moving to the next
+2. **Test-Driven Approach**: Write tests first to understand expected behavior
+3. **Mathematical Verification**: Use known-good test cases for metrics calculations
+4. **Edge Case Coverage**: Focus on boundary conditions and error handling
+5. **Performance Validation**: Include performance regression testing for critical algorithms
+
+### **📋 Success Criteria**
+
+- **✅ 95%+ code coverage** for each tested component
+- **✅ All edge cases handled** with proper error messages
+- **✅ Performance benchmarks** established for algorithmic components
+- **✅ Mathematical correctness** verified with reference implementations
+- **✅ CI/CD integration** ready for automated testing
+
+**Ready to start with Phase 1: Metrics Calculation Testing?** This will give maximum confidence in research result accuracy! 🎯
 
 ### **📊 CODE QUALITY METRICS**
 
@@ -487,3 +662,34 @@ cv::Mat descriptors = pooling->apply(image, keypoints, detector, config);
 - **Extensible**: Factory patterns for easy addition
 - **Maintainable**: Clear separation of concerns
 - **Reproducible**: YAML-driven configuration system
+
+---
+
+## Session Log — 2025-08-29
+
+What we did today:
+
+- Cleanup
+  - Converted low-signal `std::cout` error prints to `std::cerr` in `descriptor_compare/experiment_config.cpp`.
+  - Removed empty directory `src/core/descriptor/extractors/traditional/`.
+  - Standardized CLI include paths to project-root.
+  - Added basic schema/range validation to `YAMLConfigLoader` (required fields, ranges, enums).
+
+- Stage 7 incremental integration
+  - Implemented `ProcessorBridge::detectAndComputeLegacy` to delegate to legacy utilities and pooling.
+  - Added `MigrationToggle` and `ProcessorBridgeFacade`; wired CLI to set toggle from YAML.
+  - Guarded routing in `processor_utils` for NoPooling (new path on, fall back on any error).
+  - Added new-interface overload to `PoolingStrategy` and implemented in `NoPooling`.
+
+- Configs and runs
+  - Added `config/experiments/sift_baseline_migration.yaml` (independent detection, migration on).
+  - Added `config/experiments/sift_locked_migration.yaml` (locked-in, migration on).
+  - Generated locked keypoints (`keypoint_manager generate-projected ../data sift_locked_proj`).
+  - Ran baseline locked legacy and locked migration: identical MAP/P@K recorded in DB.
+  - Ran independent detection migration: completed with lower metrics (expected).
+
+Next steps (queued):
+
+- Add parity unit tests for SIFT/RGBSIFT NoPooling (descriptor shape/type).
+- Extend `DomainSizePooling` and `StackingPooling` to support `IDescriptorExtractor` and enable routing for those strategies.
+- Optionally expose a CLI flag override for migration toggle.

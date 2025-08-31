@@ -1,6 +1,6 @@
 #include "thesis_project/database/DatabaseManager.hpp"
-#include "../descriptor_compare/locked_in_keypoints.hpp"
-#include "../descriptor_compare/processor_utils.hpp"
+#include "descriptor_compare/locked_in_keypoints.hpp"
+#include "descriptor_compare/processor_utils.hpp"
 #include "thesis_project/logging.hpp"
 #include <iostream>
 #include <filesystem>

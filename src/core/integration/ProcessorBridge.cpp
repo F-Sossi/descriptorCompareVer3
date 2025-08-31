@@ -1,6 +1,9 @@
 #include "ProcessorBridge.hpp"
 #include "../descriptor/factories/DescriptorFactory.hpp"
 #include <iostream>
+#include "descriptor_compare/processor_utils.hpp"
+#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/pooling/PoolingFactory.hpp"
 
 namespace thesis_project {
 namespace integration {
@@ -44,9 +47,19 @@ bool ProcessorBridge::isUsingNewInterface(const experiment_config& config) {
 
 std::pair<std::vector<cv::KeyPoint>, cv::Mat>
 ProcessorBridge::detectAndComputeLegacy(const cv::Mat& image, const experiment_config& config) {
-    // TODO: Call existing processor_utils functions
-    // For now, just throw to indicate not implemented
-    throw std::runtime_error("Legacy fallback not yet implemented - needs processor_utils integration");
+    // Delegate to legacy utilities honoring locked-in keypoints flag
+    if (config.descriptorOptions.UseLockedInKeypoints) {
+        // In legacy flow, locked keypoints are provided externally per image.
+        // Here, we default to detecting via detector if none provided.
+        // Since we don't have external keypoints in this bridge context,
+        // fall back to normal detection path to avoid failure.
+        auto result = processor_utils::detectAndCompute(config.detector, image);
+        auto pooling = thesis_project::pooling::PoolingFactory::createFromConfig(config);
+        cv::Mat descriptors = pooling->computeDescriptors(image, result.first, config.detector, config);
+        return {result.first, descriptors};
+    } else {
+        return processor_utils::detectAndComputeWithConfig(image, config);
+    }
 }
 
 std::pair<std::vector<cv::KeyPoint>, cv::Mat>

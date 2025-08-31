@@ -248,6 +248,15 @@ namespace thesis_project {
     }
 
     // ================================
+    // DSP SCALE WEIGHTING
+    // ================================
+    enum class ScaleWeighting {
+        UNIFORM,
+        TRIANGULAR,
+        GAUSSIAN
+    };
+
+    // ================================
     // ENHANCED CONFIGURATION STRUCTURES
     // ================================
 
@@ -267,6 +276,9 @@ namespace thesis_project {
     struct DescriptorParams {
         PoolingStrategy pooling = PoolingStrategy::NONE;
         std::vector<float> scales = {1.0f, 1.5f, 2.0f};
+        std::vector<float> scale_weights; // optional: if provided, use weighted pooling aligned with scales
+        ScaleWeighting scale_weighting = ScaleWeighting::UNIFORM; // procedural weighting if explicit weights not provided
+        float scale_weight_sigma = 0.15f; // gaussian sigma in log-space (triangular radius proxy)
         bool normalize_before_pooling = false;
         bool normalize_after_pooling = true;
         int norm_type = cv::NORM_L2;

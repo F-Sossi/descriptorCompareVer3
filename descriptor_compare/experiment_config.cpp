@@ -15,7 +15,7 @@ experiment_config::experiment_config() {
         this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
         if(this->detector2) {
         } else {
-            std::cout << "[ERROR] Secondary detector creation failed!" << std::endl;
+            std::cerr << "[ERROR] Secondary detector creation failed!" << std::endl;
         }
     }
 
@@ -216,7 +216,7 @@ void experiment_config::refreshDetectors() {
         this->detector2 = createDescriptorExtractor(this->descriptorOptions.descriptorType2, this->descriptorOptions.max_features);
         if(this->detector2) {
         } else {
-            std::cout << "[ERROR] Secondary detector recreation failed!" << std::endl;
+            std::cerr << "[ERROR] Secondary detector recreation failed!" << std::endl;
         }
     } else {
         this->detector2.reset();  // Clear any existing detector2
@@ -244,7 +244,6 @@ void experiment_config::verifyConfiguration(){
 
 
 }
-
 
 
 

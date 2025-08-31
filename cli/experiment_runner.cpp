@@ -1,6 +1,8 @@
-#include "../src/core/config/YAMLConfigLoader.hpp"
-#include "../src/core/config/ConfigurationBridge.hpp"
-#include "../descriptor_compare/image_processor.hpp"
+#include "src/core/config/YAMLConfigLoader.hpp"
+#include "src/core/config/ConfigurationBridge.hpp"
+#include "descriptor_compare/image_processor.hpp"
+#include "src/core/integration/ProcessorBridgeFacade.hpp"
+#include "src/core/integration/MigrationToggle.hpp"
 #include "thesis_project/logging.hpp"
 #include "thesis_project/types.hpp"
 #ifdef BUILD_DATABASE
@@ -51,6 +53,9 @@ int main(int argc, char** argv) {
         // Results directory creation removed - using database storage only
         std::string results_base = yaml_config.output.results_path + yaml_config.experiment.name;
 
+        // Set migration toggle globally for optional Stage 7 routing
+        thesis_project::integration::MigrationToggle::setEnabled(yaml_config.migration.use_new_interface);
+
         // Run experiment for each descriptor configuration
         for (size_t i = 0; i < yaml_config.descriptors.size(); ++i) {
             const auto& desc_config = yaml_config.descriptors[i];
@@ -65,6 +70,23 @@ int main(int argc, char** argv) {
 
             // Descriptor-specific directory creation removed - using database storage only
             std::string results_path = results_base + "/" + desc_config.name;
+
+            // Optional Stage 7 migration smoke test (does not alter main pipeline)
+            if (yaml_config.migration.use_new_interface) {
+                try {
+                    bool supported = thesis_project::integration::isNewInterfaceSupported(old_config);
+                    if (supported) {
+                        LOG_INFO("[Migration] New interface supported for descriptor: " + desc_config.name);
+                        cv::Mat test_image = cv::Mat::zeros(100, 100, CV_8UC3);
+                        auto result = thesis_project::integration::smokeDetectAndCompute(test_image, old_config);
+                        LOG_INFO("[Migration] Smoke test: " + std::to_string(result.first.size()) + " keypoints, " + std::to_string(result.second.rows) + " descriptors");
+                    } else {
+                        LOG_INFO("[Migration] New interface not supported for descriptor: " + desc_config.name + ", using legacy path.");
+                    }
+                } catch (const std::exception& e) {
+                    LOG_INFO(std::string("[Migration] New interface smoke test failed: ") + e.what());
+                }
+            }
 
 #ifdef BUILD_DATABASE
             // Record experiment configuration
@@ -165,6 +187,8 @@ int main(int argc, char** argv) {
         LOG_INFO("🎉 Experiment completed: " + yaml_config.experiment.name);
         LOG_INFO("📊 Experiment results saved to database");
 
+        // Reset migration toggle to avoid leaking state
+        thesis_project::integration::MigrationToggle::setEnabled(false);
         return 0;
 
     } catch (const std::exception& e) {

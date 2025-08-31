@@ -50,6 +50,7 @@ namespace config {
         static void parseEvaluation(const YAML::Node& node, ExperimentConfig::Evaluation& evaluation);
         static void parseOutput(const YAML::Node& node, ExperimentConfig::Output& output);
         static void parseDatabase(const YAML::Node& node, DatabaseParams& database);
+        static void parseMigration(const YAML::Node& node, ExperimentConfig::Migration& migration);
 
         // Type conversion helpers
         static DescriptorType stringToDescriptorType(const std::string& str);
@@ -57,6 +58,9 @@ namespace config {
         static KeypointGenerator stringToKeypointGenerator(const std::string& str);
         static MatchingMethod stringToMatchingMethod(const std::string& str);
         static ValidationMethod stringToValidationMethod(const std::string& str);
+
+        // Basic schema/range validation
+        static void validate(const ExperimentConfig& config);
     };
 
 } // namespace config

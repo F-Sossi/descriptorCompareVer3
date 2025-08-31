@@ -19,6 +19,14 @@ public:
         const experiment_config& config
     ) override;
 
+    // New interface overload
+    cv::Mat computeDescriptors(
+        const cv::Mat& image,
+        const std::vector<cv::KeyPoint>& keypoints,
+        thesis_project::IDescriptorExtractor& extractor,
+        const experiment_config& config
+    ) override;
+
     std::string getName() const override {
         return "None";
     }
