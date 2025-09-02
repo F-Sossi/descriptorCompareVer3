@@ -1,5 +1,28 @@
 # Complete Architecture Refactoring Plan
 
+## ✅ STATUS UPDATE (As of 2025-09-01)
+
+Summary of what is now complete and live:
+- New pipeline is the default everywhere (no bridge/toggle). All runs go through Schema v1 configs, factories, and pooling strategies.
+- Strict YAML Schema v1: required fields, ranges, unique descriptor names, stacking validation, DSP scale checks, DNN patch params. Legacy keys removed.
+- Descriptor wrappers: SIFT, RGBSIFT, HoNC, VSIFT, DSPSIFT, and VGG; DNNPatch wrapper available via YAML `type: dnn_patch`.
+- Factory support: `DescriptorFactory` creates all wrappers; VGG gated by OpenCV contrib detection.
+- CLI: `cli/experiment_runner.cpp` uses the new interface end‑to‑end and records timing + true mAP metrics to DB metadata.
+- Profiling: detect/compute/match times, throughput (images/sec, kps/sec) persisted; per‑scene true mAP in metadata.
+- Configs: Added defaults and minis (SIFT baselines, DSP gaussian, stacking) plus VGG and DNN patch examples; build‑friendly configs for `../data`.
+- Tests: Legacy bridge tests removed; new YAML Schema v1 tests; factory tests updated. All tests pass (19/19).
+- CMake: Cleaned targets; VGG enabled when `xfeatures2d` is present; CLI wires all wrappers.
+
+Recent validation (mini run):
+- VGG on scenes [i_dome, v_wall], independent detection: P@1≈0.503, true_map_micro≈0.535; results saved to DB.
+
+Next steps (short list):
+- Compare SIFT vs VGG on the same scenes; add VGG parameter sweeps (desc size/orientation/image normalize).
+- Prepare a small run matrix (NONE vs DSP vs STACKING vs VGG) on a subset.
+- DNN patch: integrate a sample ONNX model and add a verified config.
+
+---
+
 ## ✅ IMPLEMENTATION STATUS (As of 2025-08-26)
 
 ### **Phase 3 & 4 COMPLETE: Production-Ready Architecture**
@@ -17,16 +40,16 @@
 - SIFT + Stacking: 31.7% MAP
 - All pooling strategies (None, DSP, Stacking) working correctly
 
-### **🚧 Decision: Make New Core Pipeline The Default (Drop Back-Compat)**
+### **✅ New Core Pipeline Is Default (Back-Compat Dropped)**
 
-We will finish the refactor and run the project exclusively on the new, clean pipeline. Backward compatibility with legacy `descriptor_compare/` code and config shapes is no longer required.
+We now run exclusively on the new, clean pipeline. Backward compatibility with legacy `descriptor_compare/` code paths and deprecated config shapes has been removed.
 
-Implications (actionable):
-- New pipeline becomes default across CLIs and libraries.
-- Remove bridge layers and toggles: `ProcessorBridge`, `ProcessorBridgeFacade`, and `MigrationToggle`.
-- Remove legacy-only configuration allowances (e.g., `normalize`, `matching_threshold`, `validation_method`, `use_locked_keypoints`).
-- Keep only the modern YAML schema (Schema v1) and enforce it strictly.
-- Retire usage of `descriptor_compare/` in the runtime path; keep only what’s needed temporarily for tests during the transition, then prune.
+Completed actions:
+- New pipeline is default across CLIs and libraries (no toggles).
+- Removed bridge layers and toggles: `ProcessorBridge`, `ProcessorBridgeFacade`, `MigrationToggle`, and legacy tests tied to them.
+- Removed legacy-only configuration keys (e.g., `matching_threshold`, `validation_method`, `use_locked_keypoints`).
+- Schema v1 is enforced strictly by `YAMLConfigLoader`.
+- Runtime path uses factories + pooling strategies only; legacy code is no longer used in execution.
 
 ### 2025-08-29 — Incremental Stage 7 Integration (Historical)
 
@@ -93,6 +116,7 @@ What we did
 - Removed the entire migration/bridge layer: `ProcessorBridge`, `ProcessorBridgeFacade`, `MigrationToggle`.
 - Removed legacy `ConfigurationBridge` and all bridge-related tests; enforced a single strict Schema v1.
 - Updated/added configs: strict normalization fields, `config/defaults/*`, and a fast mini config `sift_baseline_mini.yaml`.
+- Added wrappers and factory support for HoNC, VSIFT, and DSPSIFT; DSPSIFT maps descriptor params `scales` to its internal pooling range.
 
 Mini-run snapshot (i_dome + v_wall)
 - SIFT, NoPooling, homography_projection
@@ -297,6 +321,68 @@ Deliverables:
 - Single, documented YAML schema (v1) with defaults and design tips.
 - Updated CLI (runner) and tests running on the new pipeline.
 - Improved validation and actionable warnings in YAML loader.
+
+---
+
+## 🔧 Next Up: Descriptor Wrappers + Trade‑Off Metrics
+
+### Descriptor Wrapper Roadmap (Schema v1, new interface)
+- Implement wrappers in `src/core/descriptor/extractors/wrappers/`:
+  - HoNCWrapper.{hpp,cpp}: Wrap `keypoints/HoNC` for new interface
+  - VSIFTWrapper.{hpp,cpp}: Wrap `keypoints/VanillaSIFT` or vSIFT impl
+  - (Optional) Additional color descriptors following the same pattern
+- Extend `DescriptorFactory`:
+  - `create(DescriptorType::{HoNC,vSIFT})` and `isSupported()`
+  - Add to `getSupportedTypes()`
+- Acceptance criteria:
+  - End‑to‑end extraction works via `experiment_runner` for each wrapper
+  - Pooling strategies (NONE, DSP, STACKING) operate correctly with wrappers
+  - Light tests: creation paths + minimal extraction sanity checks
+
+### Performance & Trade‑Off Metrics (Benchmarking)
+- Goal: quantify time/throughput overheads across configurations to inform experiment design.
+- Instrumentation (aggregated per run; stored in DB metadata):
+  - detect_time_ms, extract_time_ms, pooling_time_ms, match_time_ms
+  - total_images, total_keypoints, descriptors_rows, descriptors_cols
+  - throughput: kps_per_sec, images_per_sec
+  - stacking_overhead_ms, dsp_overhead_ms (when applicable)
+- Implementation steps:
+  - Add timers around detection, extraction, pooling, matching in `experiment_runner`
+  - Accumulate per‑scene, aggregate to run‑level; store in `results.metadata` as k=v pairs
+  - Add CLI flag `--profile` (optional) to toggle detailed metrics (default ON for CLI)
+- Analysis helpers:
+  - Provide SQL snippets and example queries in docs/benchmarking.md
+  - Add plots in analysis scripts (optional) for trade‑off curves
+- Acceptance criteria:
+  - Results include consistent timing keys across runs
+  - Example configs demonstrate time/accuracy trade‑offs (NONE vs DSP vs STACKING)
+
+### Timeline & Scope
+- Phase A (1 day): HoNC + vSIFT wrappers, factory support, smoke tests
+- Phase B (1 day): Timing instrumentation + DB metadata keys, docs + SQL snippets
+- Phase C (optional): Analysis plots + report templates
+
+## 🧠 Neural/VGG Descriptor Comparisons (No Pooling)
+
+Goal: Add learned descriptors as drop‑in, non‑pooled comparators against SIFT/DSPSIFT/RGBSIFT. Ensure fair comparisons by controlling the patch support region.
+
+Plan
+- VGG descriptor wrapper (OpenCV contrib):
+  - Add `VGGWrapper` using `cv::xfeatures2d::VGG` (float output).
+  - YAML: `type: vgg`, params: `{ desc: 120|80|64|48, img_normalize, use_scale_orientation, descriptor_normalize, descriptor_threshold, scale_factor }`.
+  - Matching: L2; pooling: none (to avoid double pooling vs DSPSIFT).
+  - Fairness: tune `scale_factor` to approximate SIFT’s effective support window.
+
+- DNN patch descriptor wrapper:
+  - Add `DNNPatchWrapper` (ONNX via `cv::dnn`), no pooling.
+  - YAML: `type: dnn_patch`, params: `{ model, input_size, support_multiplier, rotate_to_upright, mean, std }`.
+  - Extraction: crop affine patch of side `support_multiplier * keypoint.size` at keypoint center; rotate to upright if set; resize to `input_size`; blob + forward; L2‑normalize 128‑D (or configured length).
+  - Matching: L2, same as SIFT.
+  - Fairness: strict control of patch size ensures identical pixel budget across NN models.
+
+Acceptance
+- End‑to‑end run via `experiment_runner` with `pooling: none`.
+- Profiled timings recorded; comparable metrics (P@K, true mAP) across SIFT vs VGG vs DNN.
 
 #### **6. Documentation Expansion**
 - **Add**: Comprehensive API documentation (Doxygen integration)

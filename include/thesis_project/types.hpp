@@ -49,8 +49,11 @@ namespace thesis_project {
     enum class DescriptorType {
         SIFT,                  ///< Standard SIFT descriptor
         HoNC,                  ///< Histogram of Normalized Colors
-        RGBSIFT,              ///< RGB color SIFT
-        vSIFT,                ///< Vanilla SIFT implementation
+        RGBSIFT,               ///< RGB color SIFT
+        vSIFT,                 ///< Vanilla SIFT implementation
+        DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
+        VGG,                   ///< VGG descriptor from OpenCV xfeatures2d (non-pooled)
+        DNN_PATCH,             ///< ONNX-backed patch descriptor via cv::dnn
         NONE                   ///< No descriptor
     };
 
@@ -159,6 +162,8 @@ namespace thesis_project {
             case DescriptorType::HoNC: return 1;
             case DescriptorType::RGBSIFT: return 2;
             case DescriptorType::vSIFT: return 3;
+            case DescriptorType::DSPSIFT: return 0; // map DSPSIFT to legacy SIFT
+            case DescriptorType::VGG: return 0; // no legacy mapping; treat as SIFT
             case DescriptorType::NONE: return 4;
             default: return 0;
         }
@@ -183,6 +188,10 @@ namespace thesis_project {
             case DescriptorType::HoNC: return "honc";
             case DescriptorType::RGBSIFT: return "rgbsift";
             case DescriptorType::vSIFT: return "vsift";
+            case DescriptorType::DSPSIFT: return "dspsift";
+            case DescriptorType::VGG: return "vgg";
+            case DescriptorType::DNN_PATCH: return "dnn_patch";
+            // Note: DNN_PATCH will be represented as "dnn_patch" if added.
             case DescriptorType::NONE: return "none";
             default: return "unknown";
         }
@@ -287,6 +296,14 @@ namespace thesis_project {
         // For stacking
         DescriptorType secondary_descriptor = DescriptorType::SIFT;
         float stacking_weight = 0.5f;
+
+        // DNN patch descriptor params (optional)
+        std::string dnn_model_path;   // ONNX model path
+        int dnn_input_size = 32;      // square input (e.g., 32x32)
+        float dnn_support_multiplier = 1.0f; // side = multiplier * keypoint.size
+        bool dnn_rotate_upright = true;      // rotate patch to keypoint orientation
+        float dnn_mean = 0.0f;        // simple mean/std normalization
+        float dnn_std = 1.0f;
     };
 
     struct EvaluationParams {

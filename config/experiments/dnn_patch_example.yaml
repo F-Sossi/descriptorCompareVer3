@@ -1,0 +1,35 @@
+experiment:
+  name: "dnn_patch_example"
+  description: "Patch-based DNN descriptor (no pooling)"
+
+dataset:
+  type: hpatches
+  path: data/hpatches
+
+keypoints:
+  generator: "sift"
+  max_features: 1000
+  source: homography_projection
+
+descriptors:
+  - name: "dnn_patch"
+    type: "dnn_patch"
+    pooling: none
+    dnn:
+      model: "models/descriptor.onnx"        # provide your ONNX file
+      input_size: 32                          # patch size NxN
+      support_multiplier: 1.0                 # side = mult * keypoint.size
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+
+evaluation:
+  matching:
+    method: brute_force
+    threshold: 0.8
+    cross_check: true
+
+output:
+  results_path: results/
+  save_visualizations: false
+

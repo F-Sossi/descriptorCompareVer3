@@ -192,6 +192,17 @@ namespace config {
             if (desc_node["stacking_weight"]) {
                 desc_config.params.stacking_weight = desc_node["stacking_weight"].as<float>();
             }
+
+            // DNN patch descriptor config (optional)
+            if (desc_node["dnn"]) {
+                const auto& dnn = desc_node["dnn"];
+                if (dnn["model"]) desc_config.params.dnn_model_path = dnn["model"].as<std::string>();
+                if (dnn["input_size"]) desc_config.params.dnn_input_size = dnn["input_size"].as<int>();
+                if (dnn["support_multiplier"]) desc_config.params.dnn_support_multiplier = dnn["support_multiplier"].as<float>();
+                if (dnn["rotate_to_upright"]) desc_config.params.dnn_rotate_upright = dnn["rotate_to_upright"].as<bool>();
+                if (dnn["mean"]) desc_config.params.dnn_mean = dnn["mean"].as<float>();
+                if (dnn["std"]) desc_config.params.dnn_std = dnn["std"].as<float>();
+            }
             
             descriptors.push_back(desc_config);
         }
@@ -346,6 +357,9 @@ namespace config {
         if (str == "rgbsift") return DescriptorType::RGBSIFT;
         if (str == "vsift" || str == "vanilla_sift") return DescriptorType::vSIFT;
         if (str == "honc") return DescriptorType::HoNC;
+        if (str == "dnn_patch") return DescriptorType::DNN_PATCH;
+        if (str == "vgg") return DescriptorType::VGG;
+        if (str == "dspsift") return DescriptorType::DSPSIFT;
         throw std::runtime_error("Unknown descriptor type: " + str);
     }
     

@@ -52,6 +52,22 @@ endif()
 
 message(STATUS "OpenCV found: ${OpenCV_VERSION}")
 
+# Detect OpenCV contrib xfeatures2d availability to enable VGG wrapper at compile time
+set(HAVE_XFEATURES2D OFF)
+if(DEFINED OpenCV_LIBRARIES)
+    string(JOIN ";" _OPENCV_LIBS ${OpenCV_LIBRARIES})
+    string(TOLOWER "${_OPENCV_LIBS}" _OPENCV_LIBS_LOWER)
+    if(_OPENCV_LIBS_LOWER MATCHES "xfeatures2d")
+        set(HAVE_XFEATURES2D ON)
+    endif()
+endif()
+if(HAVE_XFEATURES2D)
+    add_compile_definitions(HAVE_OPENCV_XFEATURES2D)
+    message(STATUS "OpenCV xfeatures2d detected: enabling VGG descriptor")
+else()
+    message(STATUS "OpenCV xfeatures2d not detected: VGG descriptor will be disabled")
+endif()
+
 # Boost
 find_package(Boost CONFIG REQUIRED COMPONENTS system filesystem)
 message(STATUS "Boost found: ${Boost_VERSION}")
@@ -324,9 +340,12 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/pooling/DomainSizePooling.cpp
                 src/core/pooling/StackingPooling.cpp
                 descriptor_compare/experiment_config.cpp
-                src/core/descriptor/factories/DescriptorFactory.cpp
-                src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
-                src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
@@ -390,73 +409,22 @@ if(TARGET test_descriptor_factory_gtest)
         descriptor_compare/experiment_config.cpp
         src/core/descriptor/factories/DescriptorFactory.cpp
         src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
-        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
     target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
-# Google Test integration tests
-create_gtest_if_exists("tests/unit/integration/test_stage7_simple_gtest.cpp" "test_stage7_simple_gtest")
-# ProcessorBridgeFacade tests
-create_gtest_if_exists("tests/unit/integration/test_processor_bridge_facade_gtest.cpp" "test_processor_bridge_facade_gtest")
-if(TARGET test_processor_bridge_facade_gtest)
-    target_sources(test_processor_bridge_facade_gtest PRIVATE 
-        descriptor_compare/experiment_config.cpp
-        src/core/integration/ProcessorBridgeFacade.cpp
-        src/core/pooling/PoolingFactory.cpp
-        src/core/pooling/NoPooling.cpp
-        src/core/pooling/DomainSizePooling.cpp
-        src/core/pooling/StackingPooling.cpp
-        src/core/matching/BruteForceMatching.cpp
-        src/core/matching/MatchingFactory.cpp
-        descriptor_compare/processor_utils.cpp
-    )
-    target_link_libraries(test_processor_bridge_facade_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_processor_bridge_facade_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
-endif()
-# Note: test_stage7_migration_gtest removed due to complex linking dependencies
-# Use the working manual test_stage7_migration instead
-
-# Stage 7 migration-focused tests
-create_gtest_if_exists("tests/unit/integration/test_stage7_migration_parity_gtest.cpp" "test_stage7_migration_parity_gtest")
-create_gtest_if_exists("tests/unit/integration/test_stage7_migration_routing_gtest.cpp" "test_stage7_migration_routing_gtest")
-create_gtest_if_exists("tests/unit/integration/test_processor_utils_routing_gtest.cpp" "test_processor_utils_routing_gtest")
-if(TARGET test_processor_utils_routing_gtest)
-    target_sources(test_processor_utils_routing_gtest PRIVATE 
-        src/core/pooling/PoolingFactory.cpp
-        src/core/pooling/NoPooling.cpp
-        src/core/pooling/DomainSizePooling.cpp
-        src/core/pooling/StackingPooling.cpp
-        src/core/matching/BruteForceMatching.cpp
-        src/core/matching/MatchingFactory.cpp
-        descriptor_compare/experiment_config.cpp
-        descriptor_compare/processor_utils.cpp
-    )
-    target_link_libraries(test_processor_utils_routing_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_processor_utils_routing_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
-endif()
+## Removed: Stage 7 integration and bridge tests (legacy)
 
 ## Removed: YAML loader + bridge tests (legacy ConfigurationBridge)
 
-# Processor utils migration tests
-create_gtest_if_exists("tests/unit/integration/test_processor_utils_migration_gtest.cpp" "test_processor_utils_migration_gtest")
-if(TARGET test_processor_utils_migration_gtest)
-    target_sources(test_processor_utils_migration_gtest PRIVATE 
-        src/core/pooling/PoolingFactory.cpp
-        src/core/pooling/NoPooling.cpp
-        src/core/pooling/DomainSizePooling.cpp
-        src/core/pooling/StackingPooling.cpp
-        src/core/matching/BruteForceMatching.cpp
-        src/core/matching/MatchingFactory.cpp
-        descriptor_compare/experiment_config.cpp
-        descriptor_compare/processor_utils.cpp
-    )
-    target_link_libraries(test_processor_utils_migration_gtest ${OpenCV_LIBRARIES} keypoints)
-    target_include_directories(test_processor_utils_migration_gtest PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
-endif()
+## Removed: processor utils migration tests (legacy)
 
 # Database tests (in database subdirectory) - legacy manual tests migrated to Google Test
-create_test_if_exists("tests/unit/database/test_database_integration.cpp" "test_database_integration")
+## Removed: legacy database integration manual test
 
 # Google Test database tests
 create_gtest_if_exists("tests/unit/database/test_database_gtest.cpp" "test_database_gtest")
@@ -580,7 +548,8 @@ if(BUILD_EXPERIMENT_CLI)
 
     # Check if experiment runner exists
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/experiment_runner.cpp")
-        add_executable(experiment_runner cli/experiment_runner.cpp
+        add_executable(experiment_runner
+                       cli/experiment_runner.cpp
                        src/core/config/YAMLConfigLoader.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp
@@ -588,10 +557,17 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
                        src/core/matching/MatchingFactory.cpp
-                        src/core/metrics/TrueAveragePrecision.cpp
+                       src/core/metrics/TrueAveragePrecision.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
-                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
+                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
+        # DNN wrapper
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DNNPatchWrapper.cpp)
+        # VGG wrapper (requires OpenCV contrib xfeatures2d)
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
         
         target_compile_features(experiment_runner PRIVATE cxx_std_17)
         
@@ -664,7 +640,8 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
     
     # Check if keypoint manager exists
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
-        add_executable(keypoint_manager cli/keypoint_manager.cpp
+        add_executable(keypoint_manager
+                       cli/keypoint_manager.cpp
                        descriptor_compare/locked_in_keypoints.cpp
                        descriptor_compare/processor_utils.cpp
                        src/core/pooling/NoPooling.cpp
@@ -675,7 +652,10 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
                        src/core/matching/MatchingFactory.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
-                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
+                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         

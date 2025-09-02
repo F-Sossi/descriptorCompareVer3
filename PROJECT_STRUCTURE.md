@@ -15,7 +15,10 @@ DescriptorProjectVer3/
 │       │   └── extractors/        # Descriptor implementations
 │       │       └── wrappers/      # Wrapper classes
 │       │           ├── SIFTWrapper.{hpp,cpp}
-│       │           └── RGBSIFTWrapper.{hpp,cpp}
+│       │           ├── RGBSIFTWrapper.{hpp,cpp}
+│       │           ├── HoNCWrapper.{hpp,cpp}
+│       │           ├── VSIFTWrapper.{hpp,cpp}
+│       │           └── DSPSIFTWrapper.{hpp,cpp}
 │       ├── database/              # Database subsystem (Stage 5)
 │       │   └── DatabaseManager.{hpp,cpp}
 │       └── pooling/, matching/, metrics/ # Core pipeline

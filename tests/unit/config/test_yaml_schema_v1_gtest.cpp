@@ -61,3 +61,11 @@ descriptors:
     EXPECT_THROW( { auto c = YAMLConfigLoader::loadFromString(yaml); (void)c; }, std::runtime_error );
 }
 
+TEST(YAMLSchemaV1, VGGTypeParses) {
+    const char* yaml = R"YAML(
+dataset: { type: hpatches, path: data/hp }
+descriptors:
+  - { name: vgg_desc, type: vgg, pooling: none }
+)YAML";
+    EXPECT_NO_THROW( { auto c = YAMLConfigLoader::loadFromString(yaml); (void)c; } );
+}

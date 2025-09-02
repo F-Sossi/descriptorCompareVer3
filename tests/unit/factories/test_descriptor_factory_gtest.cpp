@@ -28,20 +28,35 @@ TEST_F(DescriptorFactoryTest, TryCreateRGBSIFT) {
     EXPECT_EQ(ext->descriptorType(), DESCRIPTOR_RGBSIFT);
 }
 
-TEST_F(DescriptorFactoryTest, UnsupportedTypes) {
+TEST_F(DescriptorFactoryTest, SupportHoNCAndVSIFT) {
     cfg.descriptorOptions.descriptorType = DESCRIPTOR_HoNC;
-    EXPECT_FALSE(tf::DescriptorFactory::isSupported(cfg));
-    auto none = tf::DescriptorFactory::tryCreate(cfg);
-    EXPECT_EQ(none, nullptr);
-    EXPECT_THROW({ auto x = tf::DescriptorFactory::create(cfg); (void)x; }, std::runtime_error);
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
+    auto honc = tf::DescriptorFactory::tryCreate(cfg);
+    ASSERT_NE(honc, nullptr);
+    EXPECT_EQ(honc->descriptorType(), DESCRIPTOR_HoNC);
+
+    cfg.descriptorOptions.descriptorType = DESCRIPTOR_vSIFT;
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
+    auto vsift = tf::DescriptorFactory::tryCreate(cfg);
+    ASSERT_NE(vsift, nullptr);
+    EXPECT_EQ(vsift->descriptorType(), DESCRIPTOR_vSIFT);
 }
 
 TEST_F(DescriptorFactoryTest, SupportedTypesList) {
     auto types = tf::DescriptorFactory::getSupportedTypes();
-    bool has_sift = false, has_rgbsift = false;
-    for (const auto& t : types) { if (t == "SIFT") has_sift = true; if (t == "RGBSIFT") has_rgbsift = true; }
+    bool has_sift = false, has_rgbsift = false, has_honc = false, has_vsift = false, has_vgg = false;
+    for (const auto& t : types) {
+        if (t == "SIFT") has_sift = true;
+        if (t == "RGBSIFT") has_rgbsift = true;
+        if (t == "HoNC") has_honc = true;
+        if (t == "VSIFT") has_vsift = true;
+        if (t == "VGG") has_vgg = true;
+    }
     EXPECT_TRUE(has_sift);
     EXPECT_TRUE(has_rgbsift);
+    EXPECT_TRUE(has_honc);
+    EXPECT_TRUE(has_vsift);
+    // VGG is optional depending on OpenCV build; no hard assertion
 }
 
 TEST_F(DescriptorFactoryTest, IsSupportedFlags) {
@@ -49,5 +64,8 @@ TEST_F(DescriptorFactoryTest, IsSupportedFlags) {
     EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
     cfg.descriptorOptions.descriptorType = DESCRIPTOR_RGBSIFT;
     EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
+    cfg.descriptorOptions.descriptorType = DESCRIPTOR_HoNC;
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
+    cfg.descriptorOptions.descriptorType = DESCRIPTOR_vSIFT;
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
 }
-

@@ -1,5 +1,5 @@
 #include "src/core/config/YAMLConfigLoader.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
@@ -18,6 +18,13 @@
 
 using namespace thesis_project;
 
+struct ProfilingSummary {
+    double detect_ms = 0.0;
+    double compute_ms = 0.0;
+    double match_ms = 0.0;
+    long total_images = 0;
+    long total_kps = 0;
+};
 // Create a simple SIFT detector for independent detection
 static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::ExperimentConfig& cfg) {
     // Only SIFT supported here for simplicity; extend as needed
@@ -30,10 +37,11 @@ static ::ExperimentMetrics processDirectoryNew(
     const config::ExperimentConfig& yaml_config,
     const config::ExperimentConfig::DescriptorConfig& desc_config,
 #ifdef BUILD_DATABASE
-    thesis_project::database::DatabaseManager* db_ptr
+    thesis_project::database::DatabaseManager* db_ptr,
 #else
-    void* db_ptr
+    void* db_ptr,
 #endif
+    ProfilingSummary& profile
 ) {
     namespace fs = std::filesystem;
     ::ExperimentMetrics overall;
@@ -45,10 +53,32 @@ static ::ExperimentMetrics processDirectoryNew(
         }
 
         // Build extractor and pooling strategy for this descriptor (Schema v1)
-        auto extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
+        std::unique_ptr<IDescriptorExtractor> extractor;
+        if (desc_config.type == thesis_project::DescriptorType::DNN_PATCH) {
+            if (desc_config.params.dnn_model_path.empty()) {
+                throw std::runtime_error("dnn_patch requires dnn.model path in YAML");
+            }
+            extractor = std::make_unique<thesis_project::wrappers::DNNPatchWrapper>(
+                desc_config.params.dnn_model_path,
+                desc_config.params.dnn_input_size,
+                desc_config.params.dnn_support_multiplier,
+                desc_config.params.dnn_rotate_upright,
+                desc_config.params.dnn_mean,
+                desc_config.params.dnn_std
+            );
+        } else {
+            extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
+        }
         auto pooling = thesis_project::pooling::PoolingFactory::createFromConfig(desc_config);
         // Matching: use brute-force L2 with cross-check (current default)
         auto matcher = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+
+        // Profiling accumulators
+        double detect_ms = 0.0;
+        double compute_ms = 0.0;
+        double match_ms = 0.0;
+        long total_images = 0;
+        long total_kps = 0;
 
         for (const auto& entry : fs::directory_iterator(yaml_config.dataset.path)) {
             if (!entry.is_directory()) continue;
@@ -80,11 +110,20 @@ static ::ExperimentMetrics processDirectoryNew(
             {
                 // Detect fresh keypoints
                 auto det = makeDetector(yaml_config);
+                auto t0 = std::chrono::high_resolution_clock::now();
                 det->detect(image1, keypoints1);
+                auto t1 = std::chrono::high_resolution_clock::now();
+                detect_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
             }
 
             // Compute descriptors1 via new interface + pooling
-            cv::Mat descriptors1 = pooling->computeDescriptors(image1, keypoints1, *extractor, desc_config);
+            cv::Mat descriptors1;
+            {
+                auto t0 = std::chrono::high_resolution_clock::now();
+                descriptors1 = pooling->computeDescriptors(image1, keypoints1, *extractor, desc_config);
+                auto t1 = std::chrono::high_resolution_clock::now();
+                compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+            }
 
             for (int i = 2; i <= 6; ++i) {
                 std::string image_name = std::to_string(i) + ".ppm";
@@ -109,15 +148,30 @@ static ::ExperimentMetrics processDirectoryNew(
 #endif
                 {
                     auto det = makeDetector(yaml_config);
+                    auto t0 = std::chrono::high_resolution_clock::now();
                     det->detect(image2, keypoints2);
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    detect_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
                 }
 
                 // Compute descriptors2
-                cv::Mat descriptors2 = pooling->computeDescriptors(image2, keypoints2, *extractor, desc_config);
+                cv::Mat descriptors2;
+                {
+                    auto t0 = std::chrono::high_resolution_clock::now();
+                    descriptors2 = pooling->computeDescriptors(image2, keypoints2, *extractor, desc_config);
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+                }
                 if (descriptors1.empty() || descriptors2.empty()) continue;
 
                 // Match descriptors
-                auto matches = matcher->matchDescriptors(descriptors1, descriptors2);
+                std::vector<cv::DMatch> matches;
+                {
+                    auto t0 = std::chrono::high_resolution_clock::now();
+                    matches = matcher->matchDescriptors(descriptors1, descriptors2);
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    match_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+                }
 
                 // Legacy precision using index equality (if locked)
                 int correctMatches = 0;
@@ -162,10 +216,18 @@ static ::ExperimentMetrics processDirectoryNew(
             // finalize per-scene
             metrics.calculateMeanPrecision();
             overall.merge(metrics);
+            total_images += 5;
+            total_kps += static_cast<long>(keypoints1.size());
         }
 
         overall.calculateMeanPrecision();
         overall.success = true;
+        // Export profiling to caller
+        profile.detect_ms = detect_ms;
+        profile.compute_ms = compute_ms;
+        profile.match_ms = match_ms;
+        profile.total_images = total_images;
+        profile.total_kps = total_kps;
         return overall;
     } catch (const std::exception& e) {
         return ::ExperimentMetrics::createError(e.what());
@@ -239,13 +301,14 @@ int main(int argc, char** argv) {
 #endif
 
             // Run new pipeline path end-to-end
+            ProfilingSummary profile{};
             auto experiment_metrics = processDirectoryNew(yaml_config, desc_config,
 #ifdef BUILD_DATABASE
-                &db
+                &db,
 #else
-                nullptr
+                nullptr,
 #endif
-            );
+                profile);
             
 #ifdef BUILD_DATABASE
             if (experiment_id != -1) {
@@ -267,6 +330,17 @@ int main(int argc, char** argv) {
                 results.total_keypoints = experiment_metrics.total_keypoints;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
+                // Profiling metadata
+                results.metadata["detect_time_ms"] = std::to_string(profile.detect_ms);
+                results.metadata["compute_time_ms"] = std::to_string(profile.compute_ms);
+                results.metadata["match_time_ms"] = std::to_string(profile.match_ms);
+                results.metadata["total_images"] = std::to_string(profile.total_images);
+                results.metadata["total_keypoints"] = std::to_string(profile.total_kps);
+                double total_sec = duration.count() > 0 ? (duration.count() / 1000.0) : 0.0;
+                if (total_sec > 0.0) {
+                    results.metadata["images_per_sec"] = std::to_string(profile.total_images / total_sec);
+                    results.metadata["kps_per_sec"] = std::to_string(profile.total_kps / total_sec);
+                }
                 // True IR-style mAP metrics (conditional - excluding R=0)
                 results.metadata["true_map_micro"] = std::to_string(experiment_metrics.true_map_micro);
                 results.metadata["true_map_macro_by_scene"] = std::to_string(experiment_metrics.true_map_macro_by_scene);

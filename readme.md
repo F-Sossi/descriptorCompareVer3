@@ -854,6 +854,50 @@ Where to look
 - See `docs/pooling_semantics.md` for details on weighted pooling and normalization semantics.
 - Use `config/defaults/*` as starting points; copy into `config/experiments/` for your runs.
 
+## Supported Descriptors (Schema v1)
+
+Types and YAML values:
+- SIFT: `type: "sift"`
+- RGBSIFT: `type: "rgbsift"` (color; 3×128 stacking inside the descriptor). Set `use_color: true` if applicable.
+- HoNC: `type: "honc"` (Histogram of Normalized Colors)
+- vSIFT: `type: "vsift"` (Vanilla SIFT implementation)
+- DSPSIFT: `type: "dspsift"` (Domain-Size Pooled SIFT; professor’s implementation)
+- VGG: `type: "vgg"` (OpenCV xfeatures2d VGG descriptor; requires OpenCV contrib)
+
+Notes
+- DSPSIFT performs domain-size pooling internally by averaging descriptors across a range of measurement window sizes. To avoid double pooling, use `pooling: "none"` with DSPSIFT.
+- To control the DSPSIFT pooling range via YAML, set `descriptors[].params.scales: [min, ..., max]`; the wrapper maps `[min, max]` to its internal range and uses count for the number of samples.
+- VGG is intended as a non-pooled comparator; use `pooling: none` and L2 matching for fair baselines.
+
+Example (DSPSIFT)
+```yaml
+descriptors:
+  - name: "dspsift"
+    type: "dspsift"
+    pooling: "none"                # avoid double pooling
+    scales: [0.85, 1.0, 1.3]       # maps to DSPSIFT linePoint1..linePoint2 and numScales
+    normalize_after_pooling: true
+```
+
+## Profiling & Trade‑Off Metrics
+
+The runner stores timing/throughput metrics in `results.metadata`:
+- `detect_time_ms`: total detection time
+- `compute_time_ms`: total descriptor extraction + pooling time
+- `match_time_ms`: total matching time
+- `total_images`, `total_keypoints`
+- `images_per_sec`, `kps_per_sec`
+
+Query latest (CSV):
+```sql
+SELECT r.processing_time_ms, r.metadata
+FROM results r
+ORDER BY r.id DESC
+LIMIT 1;
+```
+
+See `docs/benchmarking.md` for more details and example queries.
+
 ## Designing Experiment Sets
 
 - Naming conventions:
