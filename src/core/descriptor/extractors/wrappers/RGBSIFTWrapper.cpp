@@ -4,8 +4,12 @@
 namespace thesis_project {
 namespace wrappers {
 
+RGBSIFTWrapper::RGBSIFTWrapper() {
+    rgbsift_ = std::make_unique<RGBSIFT>();
+}
+
 RGBSIFTWrapper::RGBSIFTWrapper(const experiment_config& config)
-    : config_(config) {
+    : config_(std::make_unique<experiment_config>(config)) {
     rgbsift_ = std::make_unique<RGBSIFT>();
 }
 
@@ -23,7 +27,9 @@ std::string RGBSIFTWrapper::getConfiguration() const {
     ss << "RGBSIFT Wrapper Configuration:\n";
     ss << "  RGB SIFT descriptor\n";
     ss << "  Descriptor size: " << descriptorSize() << "\n";
-    ss << "  Pooling Strategy: " << static_cast<int>(config_.descriptorOptions.poolingStrategy) << "\n";
+    if (config_) {
+        ss << "  Pooling Strategy: " << static_cast<int>(config_->descriptorOptions.poolingStrategy) << "\n";
+    }
     return ss.str();
 }
 

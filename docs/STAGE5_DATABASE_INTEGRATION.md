@@ -1,19 +1,17 @@
 # Stage 5: Database Integration
 
 ## Overview
-Stage 5 adds optional experiment tracking capabilities without disrupting the existing workflow. The database integration is completely optional and disabled by default.
+Stage 5 adds experiment tracking capabilities without disrupting the workflow. Database integration is enabled by default in this repo (`-DBUILD_DATABASE=ON`).
 
 ## Key Features
 
-### 1. Optional Integration
+### 1. Integration
 - Database tracking can be enabled/disabled at build time
-- When disabled, zero overhead and no dependencies
-- When enabled, automatic experiment tracking
+- Default build enables database integration (automatic experiment tracking)
 
-### 2. Backward Compatibility
-- Existing `descriptor_compare` workflow unchanged
-- All existing functionality preserved
-- No changes required to existing code
+### 2. CLI-First Workflow
+- Use `experiment_runner` and `keypoint_manager` CLIs
+- `descriptor_compare` components remain as libraries used internally
 
 ### 3. SQLite-Based Storage
 - Lightweight, embedded database
@@ -27,7 +25,7 @@ Stage 5 adds optional experiment tracking capabilities without disrupting the ex
 # Build without database (default)
 cmake .. -DBUILD_DATABASE=OFF
 make
-./descriptor_compare  # Works exactly as before
+./experiment_runner ../config/experiments/sift_baseline.yaml
 ```
 
 ### Advanced Usage (Database Enabled)
@@ -36,11 +34,11 @@ make
 cmake .. -DBUILD_DATABASE=ON
 make
 
-# Run experiments (automatically tracked if database enabled in code)
-./descriptor_compare
+# Run experiments (automatically tracked)
+./experiment_runner ../config/experiments/sift_baseline.yaml
 
 # Test database functionality
-./test_database
+ctest -R database --output-on-failure
 ```
 
 ### Code Integration Example
@@ -128,14 +126,12 @@ auto results = database_integration::createDbResults(
 5. **Analyzable**: Provides statistics and history
 6. **Flexible**: Easy to extend with new metrics
 
-## Migration Path
+## Adoption
 
-Stage 5 is designed for zero-impact migration:
-
-1. **Immediate**: All existing code works unchanged
-2. **Optional**: Enable database when ready for tracking
-3. **Gradual**: Add tracking to specific experiments as needed
-4. **Future**: Foundation for Stage 6 analysis tools
+1. **Immediate**: Use CLIs; database is on by default
+2. **Config**: Add experiment YAMLs under `config/experiments/`
+3. **Extend**: Track additional metrics via DatabaseManager
+4. **Analysis**: Use Stage 6 analysis tools
 
 ## Testing
 
@@ -149,4 +145,4 @@ This tests:
 - Experiment recording and retrieval
 - Statistics generation
 - Build system integration
-- Backward compatibility preservation
+- CLI usage validated

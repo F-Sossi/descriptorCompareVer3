@@ -35,6 +35,9 @@ public:
      */
     static PoolingStrategyPtr createFromConfig(const experiment_config& config);
 
+    // New-config overload: create from descriptor configuration (Schema v1)
+    static PoolingStrategyPtr createFromConfig(const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg);
+
     /**
      * @brief Get list of all available pooling strategy names
      * @return std::vector<std::string> List of strategy names for display/logging

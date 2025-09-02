@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PoolingStrategy.hpp"
+#include "src/core/config/ExperimentConfig.hpp"
 
 namespace thesis_project::pooling {
 
@@ -32,6 +33,13 @@ public:
         const std::vector<cv::KeyPoint>& keypoints,
         thesis_project::IDescriptorExtractor& extractor,
         const experiment_config& config
+    ) override;
+
+    cv::Mat computeDescriptors(
+        const cv::Mat& image,
+        const std::vector<cv::KeyPoint>& keypoints,
+        thesis_project::IDescriptorExtractor& extractor,
+        const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg
     ) override;
 
     std::string getName() const override {

@@ -10,9 +10,10 @@ namespace wrappers {
 class RGBSIFTWrapper : public IDescriptorExtractor {
 private:
     std::unique_ptr<RGBSIFT> rgbsift_;
-    experiment_config config_;
+    std::unique_ptr<experiment_config> config_;
 
 public:
+    RGBSIFTWrapper();
     explicit RGBSIFTWrapper(const experiment_config& config);
 
     cv::Mat extract(const cv::Mat& image,

@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <stdexcept>
+#include "src/core/config/ExperimentConfig.hpp"
 
 // Forward declaration to avoid circular dependency
 struct experiment_config;
@@ -51,6 +52,17 @@ public:
     )
     {
         throw std::runtime_error("PoolingStrategy new interface path not implemented for this strategy");
+    }
+
+    // New-config overload (Schema v1): compute using descriptor params only
+    virtual cv::Mat computeDescriptors(
+        const cv::Mat& image,
+        const std::vector<cv::KeyPoint>& keypoints,
+        thesis_project::IDescriptorExtractor& extractor,
+        const thesis_project::config::ExperimentConfig::DescriptorConfig& /*descCfg*/
+    )
+    {
+        throw std::runtime_error("PoolingStrategy v1 path not implemented for this strategy");
     }
 
     /**

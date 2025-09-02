@@ -19,9 +19,15 @@ public:
     static bool isSupported(const experiment_config& config);
     static std::vector<std::string> getSupportedTypes();
 
+    // New-config overloads (Schema v1)
+    static std::unique_ptr<IDescriptorExtractor> create(thesis_project::DescriptorType type);
+    static bool isSupported(thesis_project::DescriptorType type);
+
 private:
     static std::unique_ptr<IDescriptorExtractor> createSIFT(const experiment_config& config);
     static std::unique_ptr<IDescriptorExtractor> createRGBSIFT(const experiment_config& config);
+    static std::unique_ptr<IDescriptorExtractor> createSIFT();
+    static std::unique_ptr<IDescriptorExtractor> createRGBSIFT();
 };
 
 } // namespace factories

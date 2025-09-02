@@ -26,6 +26,16 @@ PoolingStrategyPtr PoolingFactory::createFromConfig(const experiment_config& con
     return createStrategy(config.descriptorOptions.poolingStrategy);
 }
 
+PoolingStrategyPtr PoolingFactory::createFromConfig(const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg) {
+    using thesis_project::PoolingStrategy;
+    switch (descCfg.params.pooling) {
+        case PoolingStrategy::NONE: return std::make_unique<NoPooling>();
+        case PoolingStrategy::DOMAIN_SIZE_POOLING: return std::make_unique<DomainSizePooling>();
+        case PoolingStrategy::STACKING: return std::make_unique<StackingPooling>();
+        default: throw std::runtime_error("Unknown pooling strategy (Schema v1)");
+    }
+}
+
 std::vector<std::string> PoolingFactory::getAvailableStrategies() {
     return {
         "None",

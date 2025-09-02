@@ -42,4 +42,13 @@ cv::Mat NoPooling::computeDescriptors(
     return extractor.extract(image, keypoints);
 }
 
+cv::Mat NoPooling::computeDescriptors(
+    const cv::Mat& image,
+    const std::vector<cv::KeyPoint>& keypoints,
+    thesis_project::IDescriptorExtractor& extractor,
+    const thesis_project::config::ExperimentConfig::DescriptorConfig& /*descCfg*/
+) {
+    return extractor.extract(image, keypoints);
+}
+
 } // namespace thesis_project::pooling

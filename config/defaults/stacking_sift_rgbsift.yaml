@@ -1,26 +1,24 @@
 experiment:
-  name: "sift_baseline_migration"
-  description: "SIFT baseline using new interface (independent detection)"
+  name: "stacking_sift_rgbsift"
+  description: "Stack SIFT with RGBSIFT"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []
 
 keypoints:
   generator: "sift"
-  max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
-  source: "independent_detection"
-  use_locked_keypoints: false
+  max_features: 1500
+  source: "homography_projection"
 
 descriptors:
-  - name: "sift"
+  - name: "stack_sift_rgb"
     type: "sift"
-    pooling: "none"
+    pooling: "stacking"
+    secondary_descriptor: "rgbsift"
+    stacking_weight: 0.5
     normalize_after_pooling: true
 
 evaluation:
@@ -29,7 +27,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -45,3 +42,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

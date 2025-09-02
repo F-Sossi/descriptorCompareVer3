@@ -50,5 +50,35 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createRGBSIFT(const exp
     return std::make_unique<wrappers::RGBSIFTWrapper>(config);
 }
 
+// New-config overloads
+std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::DescriptorType type) {
+    switch (type) {
+        case thesis_project::DescriptorType::SIFT:
+            return createSIFT();
+        case thesis_project::DescriptorType::RGBSIFT:
+            return createRGBSIFT();
+        default:
+            throw std::runtime_error("Unsupported descriptor type in factory (new-config)");
+    }
+}
+
+bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
+    switch (type) {
+        case thesis_project::DescriptorType::SIFT:
+        case thesis_project::DescriptorType::RGBSIFT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createSIFT() {
+    return std::make_unique<wrappers::SIFTWrapper>();
+}
+
+std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createRGBSIFT() {
+    return std::make_unique<wrappers::RGBSIFTWrapper>();
+}
+
 } // namespace factories
 } // namespace thesis_project

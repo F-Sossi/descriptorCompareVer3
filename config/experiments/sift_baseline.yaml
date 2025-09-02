@@ -22,7 +22,7 @@ descriptors:
   - name: "sift"
     type: "sift"
     pooling: "none"
-    normalize: true
+    normalize_after_pooling: true
 
 evaluation:
   matching:

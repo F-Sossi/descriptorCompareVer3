@@ -1,26 +1,25 @@
 experiment:
-  name: "sift_baseline_migration"
-  description: "SIFT baseline using new interface (independent detection)"
+  name: "sift_dsp_gaussian"
+  description: "SIFT with domain size pooling (gaussian weighting)"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []
 
 keypoints:
   generator: "sift"
   max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
-  source: "independent_detection"
-  use_locked_keypoints: false
+  source: "homography_projection"
 
 descriptors:
-  - name: "sift"
+  - name: "sift_dsp_gauss"
     type: "sift"
-    pooling: "none"
+    pooling: "domain_size_pooling"
+    scales: [ 0.85, 1.0, 1.3 ]
+    scale_weighting: "gaussian"
+    scale_weight_sigma: 0.15
     normalize_after_pooling: true
 
 evaluation:
@@ -29,7 +28,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -45,3 +43,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

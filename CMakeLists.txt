@@ -284,7 +284,7 @@ function(create_gtest_if_exists test_source test_name)
             
             # Stage 7 migration tests need additional dependencies
             if(${test_name} MATCHES "migration")
-                target_link_libraries(${test_name} thesis_migration keypoints)
+                target_link_libraries(${test_name} keypoints)
                 target_include_directories(${test_name} PRIVATE 
                     src 
                     keypoints 
@@ -318,12 +318,15 @@ function(create_gtest_if_exists test_source test_name)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src descriptor_compare keypoints)
         elseif(${test_name} MATCHES "pooling")
             # Pooling tests need OpenCV, keypoints, and pooling source files
-            target_sources(${test_name} PRIVATE 
+        target_sources(${test_name} PRIVATE 
                 src/core/pooling/PoolingFactory.cpp
                 src/core/pooling/NoPooling.cpp
                 src/core/pooling/DomainSizePooling.cpp
                 src/core/pooling/StackingPooling.cpp
                 descriptor_compare/experiment_config.cpp
+                src/core/descriptor/factories/DescriptorFactory.cpp
+                src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+                src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
@@ -383,8 +386,12 @@ create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "t
 # Google Test descriptor factory tests
 create_gtest_if_exists("tests/unit/factories/test_descriptor_factory_gtest.cpp" "test_descriptor_factory_gtest")
 if(TARGET test_descriptor_factory_gtest)
-    target_sources(test_descriptor_factory_gtest PRIVATE descriptor_compare/experiment_config.cpp)
-    target_link_libraries(test_descriptor_factory_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_sources(test_descriptor_factory_gtest PRIVATE 
+        descriptor_compare/experiment_config.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
+    target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
@@ -404,7 +411,7 @@ if(TARGET test_processor_bridge_facade_gtest)
         src/core/matching/MatchingFactory.cpp
         descriptor_compare/processor_utils.cpp
     )
-    target_link_libraries(test_processor_bridge_facade_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_link_libraries(test_processor_bridge_facade_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_processor_bridge_facade_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
 endif()
 # Note: test_stage7_migration_gtest removed due to complex linking dependencies
@@ -425,35 +432,11 @@ if(TARGET test_processor_utils_routing_gtest)
         descriptor_compare/experiment_config.cpp
         descriptor_compare/processor_utils.cpp
     )
-    target_link_libraries(test_processor_utils_routing_gtest thesis_migration keypoints ${OpenCV_LIBRARIES})
+    target_link_libraries(test_processor_utils_routing_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_processor_utils_routing_gtest PRIVATE src descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
 endif()
 
-# YAML loader + bridge tests (link loader/bridge and yaml-cpp)
-create_gtest_if_exists("tests/unit/config/test_yaml_loader_bridge_gtest.cpp" "test_yaml_loader_bridge_gtest")
-if(TARGET test_yaml_loader_bridge_gtest)
-    target_sources(test_yaml_loader_bridge_gtest PRIVATE 
-        src/core/config/YAMLConfigLoader.cpp
-        src/core/config/ConfigurationBridge.cpp
-        descriptor_compare/experiment_config.cpp
-    )
-    # OpenCV includes for types.hpp dependency
-    target_link_libraries(test_yaml_loader_bridge_gtest ${OpenCV_LIBRARIES} keypoints)
-    target_include_directories(test_yaml_loader_bridge_gtest PRIVATE ${OpenCV_INCLUDE_DIRS} keypoints)
-    # yaml-cpp
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(YAMLCPP yaml-cpp)
-    endif()
-    if(YAMLCPP_FOUND)
-        target_link_libraries(test_yaml_loader_bridge_gtest ${YAMLCPP_LIBRARIES})
-        target_include_directories(test_yaml_loader_bridge_gtest PRIVATE ${YAMLCPP_INCLUDE_DIRS})
-    else()
-        target_link_libraries(test_yaml_loader_bridge_gtest yaml-cpp)
-    endif()
-    # Include core headers
-    target_include_directories(test_yaml_loader_bridge_gtest PRIVATE src include)
-endif()
+## Removed: YAML loader + bridge tests (legacy ConfigurationBridge)
 
 # Processor utils migration tests
 create_gtest_if_exists("tests/unit/integration/test_processor_utils_migration_gtest.cpp" "test_processor_utils_migration_gtest")
@@ -468,7 +451,7 @@ if(TARGET test_processor_utils_migration_gtest)
         descriptor_compare/experiment_config.cpp
         descriptor_compare/processor_utils.cpp
     )
-    target_link_libraries(test_processor_utils_migration_gtest ${OpenCV_LIBRARIES} keypoints thesis_migration)
+    target_link_libraries(test_processor_utils_migration_gtest ${OpenCV_LIBRARIES} keypoints)
     target_include_directories(test_processor_utils_migration_gtest PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
 endif()
 
@@ -599,20 +582,16 @@ if(BUILD_EXPERIMENT_CLI)
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/experiment_runner.cpp")
         add_executable(experiment_runner cli/experiment_runner.cpp
                        src/core/config/YAMLConfigLoader.cpp
-                       src/core/config/ConfigurationBridge.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
                        src/core/matching/MatchingFactory.cpp
-                       src/core/visualization/VisualVerification.cpp
-                       src/core/metrics/TrueAveragePrecision.cpp
-                       descriptor_compare/experiment_config.cpp
-                       descriptor_compare/image_processor.cpp
-                       descriptor_compare/processor_utils.cpp
-                       descriptor_compare/locked_in_keypoints.cpp
-                       src/core/integration/ProcessorBridgeFacade.cpp)
+                        src/core/metrics/TrueAveragePrecision.cpp
+                       src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
         
         target_compile_features(experiment_runner PRIVATE cxx_std_17)
         
@@ -635,7 +614,6 @@ if(BUILD_EXPERIMENT_CLI)
         # Link libraries
         target_link_libraries(experiment_runner
             keypoints
-            thesis_migration
             Boost::system
             Boost::filesystem
         )
@@ -694,7 +672,10 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
-                       src/core/matching/MatchingFactory.cpp)
+                       src/core/matching/MatchingFactory.cpp
+                       src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         
@@ -718,7 +699,6 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
         # Link libraries
         target_link_libraries(keypoint_manager
             keypoints
-            thesis_migration
             thesis_database
             Boost::system
             Boost::filesystem
@@ -746,77 +726,7 @@ else()
     endif()
 endif()
 
-# ================================
-# STAGE 7: INTERFACE MIGRATION
-# ================================
-
-# Interface migration system (optional component)
-option(BUILD_INTERFACE_MIGRATION "Build interface migration system" ON)
-
-if(BUILD_INTERFACE_MIGRATION)
-    message(STATUS "Building Stage 7 interface migration")
-
-    # Check if migration files exist
-    if(EXISTS "${CMAKE_SOURCE_DIR}/src/core/descriptor/factories/DescriptorFactory.cpp")
-
-        # Create the interface migration library
-        add_library(thesis_migration
-            src/core/descriptor/factories/DescriptorFactory.cpp
-            src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
-            src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
-            src/core/integration/ProcessorBridge.cpp
-            src/core/integration/MigrationToggle.cpp
-        )
-
-        target_include_directories(thesis_migration PUBLIC
-            src/interfaces
-            include
-            src
-            keypoints
-            descriptor_compare
-         
-            ${CMAKE_SOURCE_DIR}/src
-        )
-
-        target_link_libraries(thesis_migration
-            keypoints
-            ${OpenCV_LIBRARIES}
-        )
-
-        target_compile_features(thesis_migration PRIVATE cxx_std_17)
-
-        # Stage 7 migration test
-        if(EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/integration/test_stage7_migration.cpp")
-            add_executable(test_stage7_migration 
-                tests/unit/integration/test_stage7_migration.cpp
-                descriptor_compare/experiment_config.cpp
-                descriptor_compare/processor_utils.cpp
-                src/core/pooling/NoPooling.cpp
-                src/core/pooling/DomainSizePooling.cpp
-                src/core/pooling/StackingPooling.cpp
-                src/core/pooling/PoolingFactory.cpp
-                src/core/matching/BruteForceMatching.cpp
-                src/core/matching/MatchingFactory.cpp
-                src/core/integration/MigrationToggle.cpp
-            )
-            target_link_libraries(test_stage7_migration thesis_migration keypoints ${OpenCV_LIBRARIES})
-            target_include_directories(test_stage7_migration PRIVATE
-                src
-                keypoints
-                descriptor_compare
-            )
-            target_compile_features(test_stage7_migration PRIVATE cxx_std_17)
-            message(STATUS "Stage 7 migration test configured")
-        endif()
-
-        message(STATUS "Interface migration system configured")
-
-    else()
-        message(WARNING "DescriptorFactory.cpp not found - skipping interface migration")
-    endif()
-else()
-    message(STATUS "Interface migration disabled (use -DBUILD_INTERFACE_MIGRATION=ON to enable)")
-endif()
+# Stage 7 migration system removed: new pipeline is the default
 # YAML negative validation tests
 create_gtest_if_exists("tests/unit/config/test_yaml_validation_errors_gtest.cpp" "test_yaml_validation_errors_gtest")
 if(TARGET test_yaml_validation_errors_gtest)
@@ -833,6 +743,24 @@ if(TARGET test_yaml_validation_errors_gtest)
     endif()
     target_link_libraries(test_yaml_validation_errors_gtest ${OpenCV_LIBRARIES})
     target_include_directories(test_yaml_validation_errors_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+
+# YAML Schema v1 tests
+create_gtest_if_exists("tests/unit/config/test_yaml_schema_v1_gtest.cpp" "test_yaml_schema_v1_gtest")
+if(TARGET test_yaml_schema_v1_gtest)
+    target_sources(test_yaml_schema_v1_gtest PRIVATE src/core/config/YAMLConfigLoader.cpp)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(YAMLCPP yaml-cpp)
+    endif()
+    if(YAMLCPP_FOUND)
+        target_link_libraries(test_yaml_schema_v1_gtest ${YAMLCPP_LIBRARIES})
+        target_include_directories(test_yaml_schema_v1_gtest PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+    else()
+        target_link_libraries(test_yaml_schema_v1_gtest yaml-cpp)
+    endif()
+    target_link_libraries(test_yaml_schema_v1_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_yaml_schema_v1_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+endif()
 endif()
 
 # Configuration bridge roundtrip tests

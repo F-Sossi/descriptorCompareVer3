@@ -17,12 +17,12 @@ descriptors:
   - name: "sift_baseline"
     type: "sift"
     pooling: "none"
-    normalize: true
+    normalize_after_pooling: true
 
   - name: "rgbsift_color"
     type: "rgbsift"
     pooling: "none"
-    normalize: true
+    normalize_after_pooling: true
     use_color: true
 
 evaluation:

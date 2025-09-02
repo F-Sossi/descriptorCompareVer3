@@ -50,7 +50,7 @@ namespace config {
         static void parseEvaluation(const YAML::Node& node, ExperimentConfig::Evaluation& evaluation);
         static void parseOutput(const YAML::Node& node, ExperimentConfig::Output& output);
         static void parseDatabase(const YAML::Node& node, DatabaseParams& database);
-        static void parseMigration(const YAML::Node& node, ExperimentConfig::Migration& migration);
+        // Migration removed in Schema v1
 
         // Type conversion helpers
         static DescriptorType stringToDescriptorType(const std::string& str);

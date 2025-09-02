@@ -9,7 +9,7 @@ dataset:
 keypoints:
   generator: "sift"
   max_features: 1000
-  source: "locked_in"
+  source: "homography_projection"
 
 descriptors:
   - name: "sift_dsp_g"
@@ -31,4 +31,3 @@ evaluation:
 output:
   results_path: "results/"
   save_visualizations: true
-

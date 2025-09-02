@@ -9,37 +9,41 @@ experiment:
 
 dataset:
   type: "hpatches"
-  path: "data/hpatches/"
+  path: "../data/"
   scenes: []  # Empty = use all scenes
 
 keypoints:
   generator: "sift"
-  params:
-    max_features: 2000
-    contrast_threshold: 0.04
-    edge_threshold: 10
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10
+  source: "homography_projection"
 
 descriptors:
   - name: "sift_baseline"
     type: "sift"
-    params:
-      pooling: "none"
+    pooling: "none"
+    normalize_after_pooling: true
 
 evaluation:
   matching:
     method: "brute_force"
     norm: "l2"
     cross_check: true
+    threshold: 0.8
 
   validation:
     method: "homography"
     threshold: 0.05
+    min_matches: 10
 
 output:
-  save_keypoints: true
+  results_path: "results/"
+  save_keypoints: false
   save_descriptors: false
   save_matches: false
   save_visualizations: true
 
 database:
-  enabled: false
+  enabled: true
+  connection: "sqlite:///experiments.db"

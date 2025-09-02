@@ -3,6 +3,7 @@
 #include "keypoints/VanillaSIFT.h"
 #include "src/interfaces/IDescriptorExtractor.hpp"
 #include "src/core/pooling/pooling_utils.hpp"
+#include "src/core/config/ExperimentConfig.hpp"
 #include <algorithm>
 
 namespace thesis_project::pooling {
@@ -134,8 +135,8 @@ void DomainSizePooling::applyRooting(cv::Mat& descriptors) const {
 cv::Mat DomainSizePooling::computeDescriptors(
     const cv::Mat& image,
     const std::vector<cv::KeyPoint>& keypoints,
-    thesis_project::IDescriptorExtractor& extractor,
-    const experiment_config& config
+thesis_project::IDescriptorExtractor& extractor,
+const experiment_config& config
 ) {
     using namespace thesis_project::pooling::utils;
 
@@ -218,6 +219,92 @@ cv::Mat DomainSizePooling::computeDescriptors(
     }
 
     return sum;
+}
+
+// New-config overload: use descriptor params from YAML new config
+cv::Mat DomainSizePooling::computeDescriptors(
+    const cv::Mat& image,
+    const std::vector<cv::KeyPoint>& keypoints,
+    thesis_project::IDescriptorExtractor& extractor,
+    const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg
+) {
+    using namespace thesis_project::pooling::utils;
+    const auto& params = descCfg.params;
+
+    if (params.scales.empty()) {
+        // No scales means act like NoPooling
+        cv::Mat d = extractor.extract(image, keypoints);
+        // Optional normalize after pooling flag applies
+        if (params.normalize_after_pooling) normalizeRows(d, params.norm_type);
+        return d;
+    }
+
+    // Prepare accumulators
+    cv::Mat acc;
+    double weight_sum = 0.0;
+    const bool use_weights = !params.scale_weights.empty();
+
+    for (size_t i = 0; i < params.scales.size(); ++i) {
+        float alpha = params.scales[i];
+        // Scale image by alpha around original resolution
+        cv::Mat processedImage;
+        if (std::abs(alpha - 1.0f) < 1e-6) {
+            processedImage = image;
+        } else {
+            cv::resize(image, processedImage, cv::Size(), alpha, alpha, cv::INTER_LINEAR);
+        }
+
+        // Scale keypoints by alpha
+        std::vector<cv::KeyPoint> kps_scaled = keypoints;
+        for (auto& kp : kps_scaled) {
+            kp.pt.x *= alpha; kp.pt.y *= alpha; kp.size *= alpha;
+        }
+
+        // Extract per-scale descriptors
+        cv::Mat desc = extractor.extract(processedImage, kps_scaled);
+
+        // Normalize before pooling if requested
+        if (params.normalize_before_pooling) normalizeRows(desc, params.norm_type);
+
+        // Weight
+        double w = 1.0;
+        if (use_weights) {
+            w = static_cast<double>(params.scale_weights[i]);
+        } else {
+            // Procedural weighting
+            switch (params.scale_weighting) {
+                case thesis_project::ScaleWeighting::GAUSSIAN: {
+                    double sigma = params.scale_weight_sigma;
+                    double x = std::log(alpha);
+                    w = std::exp(-0.5 * (x*x) / (sigma*sigma));
+                    break;
+                }
+                case thesis_project::ScaleWeighting::TRIANGULAR: {
+                    double r = params.scale_weight_sigma; // treat as radius proxy
+                    double d = std::abs(std::log(alpha));
+                    w = std::max(0.0, 1.0 - d / r);
+                    break;
+                }
+                case thesis_project::ScaleWeighting::UNIFORM:
+                default: w = 1.0; break;
+            }
+        }
+
+        // Accumulate
+        if (acc.empty()) {
+            acc = cv::Mat::zeros(desc.size(), desc.type());
+        }
+        acc += desc * w;
+        weight_sum += w;
+    }
+
+    // Average
+    if (weight_sum > 0.0) acc /= weight_sum;
+
+    // Normalize after pooling if requested
+    if (params.normalize_after_pooling) normalizeRows(acc, params.norm_type);
+
+    return acc;
 }
 
 } // namespace thesis_project::pooling

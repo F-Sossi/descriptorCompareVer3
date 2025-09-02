@@ -21,7 +21,7 @@ descriptors:
   - name: "sift"
     type: "sift"
     pooling: "none"
-    normalize: true
+    normalize_after_pooling: true
 
 evaluation:
   matching:
@@ -45,7 +45,3 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
-
-migration:
-  use_new_interface: true
-

@@ -2,6 +2,7 @@
 #include "thesis_project/logging.hpp"
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 namespace thesis_project {
 namespace config {
@@ -57,9 +58,7 @@ namespace config {
         if (root["database"]) {
             parseDatabase(root["database"], config.database);
         }
-        if (root["migration"]) {
-            parseMigration(root["migration"], config.migration);
-        }
+        // Migration removed: ignore any 'migration' key silently
         
         // Basic validation
         validate(config);
@@ -209,16 +208,54 @@ namespace config {
             throw std::runtime_error("YAML validation error: descriptors list must not be empty");
         }
 
+        // Ensure descriptor names are unique
+        std::unordered_set<std::string> names;
+        
         // Validate each descriptor
         for (const auto& d : config.descriptors) {
             if (d.name.empty()) {
                 throw std::runtime_error("YAML validation error: descriptor.name is required");
+            }
+            if (!names.insert(d.name).second) {
+                throw std::runtime_error("YAML validation error: descriptor.name must be unique: " + d.name);
             }
             if (d.type == DescriptorType::NONE) {
                 throw std::runtime_error("YAML validation error: descriptor.type is required for " + d.name);
             }
             if (d.params.stacking_weight < 0.0f || d.params.stacking_weight > 1.0f) {
                 throw std::runtime_error("YAML validation error: stacking_weight must be in [0,1] for " + d.name);
+            }
+
+            // Stacking requires a secondary descriptor to be specified (cannot be NONE)
+            if (d.params.pooling == PoolingStrategy::STACKING) {
+                if (d.params.secondary_descriptor == DescriptorType::NONE) {
+                    throw std::runtime_error("YAML validation error: stacking requires secondary_descriptor for " + d.name);
+                }
+            }
+
+            // DSP and scale semantics
+            if (!d.params.scales.empty()) {
+                for (float s : d.params.scales) {
+                    if (s <= 0.0f) {
+                        throw std::runtime_error("YAML validation error: all scales must be > 0 for " + d.name);
+                    }
+                }
+            }
+            if (!d.params.scale_weights.empty()) {
+                if (d.params.scale_weights.size() != d.params.scales.size()) {
+                    throw std::runtime_error("YAML validation error: scale_weights length must match scales for " + d.name);
+                }
+            }
+            if (d.params.scale_weight_sigma <= 0.0f) {
+                throw std::runtime_error("YAML validation error: scale_weight_sigma must be > 0 for " + d.name);
+            }
+
+            // Warnings
+            if (d.params.pooling == PoolingStrategy::NONE && !d.params.scales.empty()) {
+                LOG_WARNING("Pooling is 'none' but scales were provided for descriptor '" + d.name + "' — scales will be ignored.");
+            }
+            if (!d.params.scale_weights.empty() && d.params.scale_weighting != ScaleWeighting::UNIFORM) {
+                LOG_WARNING("Both scale_weights and scale_weighting specified for descriptor '" + d.name + "' — explicit weights take precedence.");
             }
         }
 
@@ -281,14 +318,7 @@ namespace config {
             }
         }
         
-        // Legacy support for direct evaluation parameters
-        if (node["matching_threshold"]) {
-            evaluation.params.match_threshold = node["matching_threshold"].as<float>();
-        }
-        
-        if (node["validation_method"]) {
-            evaluation.params.validation_method = stringToValidationMethod(node["validation_method"].as<std::string>());
-        }
+        // Legacy keys removed in Schema v1 (no parsing of matching_threshold / validation_method)
     }
     
     void YAMLConfigLoader::parseOutput(const YAML::Node& node, ExperimentConfig::Output& output) {
@@ -308,9 +338,7 @@ namespace config {
         if (node["save_visualizations"]) database.save_visualizations = node["save_visualizations"].as<bool>();
     }
 
-    void YAMLConfigLoader::parseMigration(const YAML::Node& node, ExperimentConfig::Migration& migration) {
-        if (node["use_new_interface"]) migration.use_new_interface = node["use_new_interface"].as<bool>();
-    }
+    // Migration removed
     
     // Type conversion helper methods
     DescriptorType YAMLConfigLoader::stringToDescriptorType(const std::string& str) {

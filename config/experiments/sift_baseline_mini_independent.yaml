@@ -1,21 +1,18 @@
 experiment:
-  name: "sift_baseline_migration"
-  description: "SIFT baseline using new interface (independent detection)"
+  name: "sift_baseline_mini_independent"
+  description: "Quick smoke run with independent detection"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []
+  scenes: ["i_dome", "v_wall"]
 
 keypoints:
   generator: "sift"
-  max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
+  max_features: 1500
   source: "independent_detection"
-  use_locked_keypoints: false
 
 descriptors:
   - name: "sift"
@@ -29,7 +26,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -40,8 +36,9 @@ output:
   save_keypoints: false
   save_descriptors: false
   save_matches: false
-  save_visualizations: true
+  save_visualizations: false
 
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

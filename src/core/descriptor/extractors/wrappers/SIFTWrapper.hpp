@@ -10,9 +10,10 @@ namespace wrappers {
 class SIFTWrapper : public IDescriptorExtractor {
 private:
     cv::Ptr<cv::SIFT> sift_;
-    experiment_config config_;
+    std::unique_ptr<experiment_config> config_;
 
 public:
+    SIFTWrapper();
     explicit SIFTWrapper(const experiment_config& config);
 
     cv::Mat extract(const cv::Mat& image,

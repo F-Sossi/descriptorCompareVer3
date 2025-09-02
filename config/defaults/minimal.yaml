@@ -1,21 +1,17 @@
 experiment:
-  name: "sift_baseline_migration"
-  description: "SIFT baseline using new interface (independent detection)"
+  name: "minimal_sift"
+  description: "Minimal runnable config using SIFT"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []
 
 keypoints:
   generator: "sift"
-  max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
-  source: "independent_detection"
-  use_locked_keypoints: false
+  max_features: 1000
+  source: "homography_projection"
 
 descriptors:
   - name: "sift"
@@ -29,7 +25,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -45,3 +40,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

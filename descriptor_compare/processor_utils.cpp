@@ -3,8 +3,6 @@
 #include "../keypoints/VanillaSIFT.h"
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
-#include "src/core/integration/MigrationToggle.hpp"
-#include "src/core/integration/ProcessorBridge.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 #include <opencv2/features2d.hpp>
 #include <opencv2/core.hpp> // For cv::Ptr and core functionalities
@@ -179,12 +177,12 @@ std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeW
         result = processor_utils::detectAndCompute(config.detector, image);
     }
 
-    // Optional Stage 7 routing for supported descriptors and pooling NONE
-    if (thesis_project::integration::MigrationToggle::isEnabled() &&
-        config.descriptorOptions.poolingStrategy == NONE &&
-        thesis_project::factories::DescriptorFactory::isSupported(config)) {
+    // New interface routing (default): for supported descriptors and strategies with extractor overloads
+    if (thesis_project::factories::DescriptorFactory::isSupported(config) &&
+        (config.descriptorOptions.poolingStrategy == NONE ||
+         config.descriptorOptions.poolingStrategy == DOMAIN_SIZE_POOLING ||
+         config.descriptorOptions.poolingStrategy == STACKING)) {
         try {
-            // Create wrapper extractor and use NoPooling overload with locked keypoints
             auto extractor = thesis_project::factories::DescriptorFactory::create(config);
             auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
             result.second = poolingStrategy->computeDescriptors(image, result.first, *extractor, config);
@@ -202,12 +200,18 @@ std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeW
 }
 
 std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeWithConfig(const cv::Mat& image, const experiment_config &config) {
-    // Optional Stage 7 routing for supported descriptors and pooling NONE
-    if (thesis_project::integration::MigrationToggle::isEnabled() &&
-        config.descriptorOptions.poolingStrategy == NONE &&
-        thesis_project::factories::DescriptorFactory::isSupported(config)) {
+    // New interface routing (default): for supported descriptors and strategies with extractor overloads
+    if (thesis_project::factories::DescriptorFactory::isSupported(config) &&
+        (config.descriptorOptions.poolingStrategy == NONE ||
+         config.descriptorOptions.poolingStrategy == DOMAIN_SIZE_POOLING ||
+         config.descriptorOptions.poolingStrategy == STACKING)) {
         try {
-            return thesis_project::integration::ProcessorBridge::detectAndComputeNew(image, config);
+            // Detect keypoints using the configured detector first
+            auto detected = processor_utils::detectAndCompute(config.detector, image);
+            auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
+            auto extractor = thesis_project::factories::DescriptorFactory::create(config);
+            cv::Mat desc = poolingStrategy->computeDescriptors(image, detected.first, *extractor, config);
+            return {detected.first, desc};
         } catch (...) {
             // Fall through to legacy path on any error
         }

@@ -60,10 +60,7 @@ namespace thesis_project::config {
         // Database configuration
         DatabaseParams database;
 
-        // Migration toggles (Stage 7)
-        struct Migration {
-            bool use_new_interface = false; // Opt-in to ProcessorBridge new interface when supported
-        } migration;
+        // Migration removed: new pipeline is the default
     };
 
 }

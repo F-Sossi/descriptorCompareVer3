@@ -17,21 +17,18 @@
 - SIFT + Stacking: 31.7% MAP
 - All pooling strategies (None, DSP, Stacking) working correctly
 
-### **🚧 Stage 7 Migration System (Future Work)**
+### **🚧 Decision: Make New Core Pipeline The Default (Drop Back-Compat)**
 
-**Parallel Modern Interface System:**
-- **Location**: `src/core/descriptor/extractors/wrappers/` + `src/core/integration/`
-- **Purpose**: Modern `IDescriptorExtractor` interface for future migration
-- **Status**: Implemented but **NOT YET INTEGRATED** with main pipeline
-- **Components**:
-  - `SIFTWrapper.cpp/hpp` - Wraps SIFT with new interface
-  - `RGBSIFTWrapper.cpp/hpp` - Wraps RGBSIFT with new interface  
-  - `ProcessorBridge.cpp` - Bridge between old and new systems
-  - `DescriptorFactory` (in factories/) - Factory for new interface
+We will finish the refactor and run the project exclusively on the new, clean pipeline. Backward compatibility with legacy `descriptor_compare/` code and config shapes is no longer required.
 
-**Key Point**: These wrapper files are **NOT DEAD CODE** - they're part of the planned Stage 7 migration to modern interfaces, but the main pipeline continues to use the working factory pattern system.
+Implications (actionable):
+- New pipeline becomes default across CLIs and libraries.
+- Remove bridge layers and toggles: `ProcessorBridge`, `ProcessorBridgeFacade`, and `MigrationToggle`.
+- Remove legacy-only configuration allowances (e.g., `normalize`, `matching_threshold`, `validation_method`, `use_locked_keypoints`).
+- Keep only the modern YAML schema (Schema v1) and enforce it strictly.
+- Retire usage of `descriptor_compare/` in the runtime path; keep only what’s needed temporarily for tests during the transition, then prune.
 
-### 2025-08-29 — Incremental Stage 7 Integration (Completed)
+### 2025-08-29 — Incremental Stage 7 Integration (Historical)
 
 - Implemented ProcessorBridge legacy fallback using existing `processor_utils` and `PoolingFactory`.
 - Added migration toggle and wiring:
@@ -46,7 +43,9 @@
   - Results are identical (MAP and P@K) for locked-in SIFT + NoPooling.
 - Added a migration config for independent detection `sift_baseline_migration.yaml` (routes through wrappers, expectedly lower metrics).
 
-Outcome: Safe opt-in Stage 7 path for SIFT/RGBSIFT with NoPooling, with proven parity under locked-in evaluation. Legacy pipeline remains default.
+Outcome (historical): Safe opt-in Stage 7 path validated parity for SIFT/RGBSIFT with NoPooling under locked-in evaluation.
+
+Superseded by the decision above: we will remove the opt-in path and make the new pipeline the only path.
 
 ---
 
@@ -84,6 +83,22 @@ New test suites (all passing)
   - `test_configuration_bridge_roundtrip_gtest`: Old ↔ New round-trip for key fields.
 
 Outcome: DSP-SIFT is robust and configurable (weighted pooling), Stacking is safer with alignment and normalization, and test coverage now spans pooling, factories, Stage 7 facade/routing, YAML validation, and configuration bridging (26 tests total; all green).
+
+### 2025-09-01 — New Pipeline Default + Bridge Removal (Completed)
+
+What we did
+- Made the new extractor pipeline the default end-to-end in the CLI experiment runner (no bridge/toggle).
+- Implemented Schema v1 pooling overloads: NoPooling, DomainSizePooling, Stacking now consume `IDescriptorExtractor` with descriptor params directly.
+- Added `DescriptorFactory::create(DescriptorType)` and `PoolingFactory::createFromConfig(descCfg)` for Schema v1.
+- Removed the entire migration/bridge layer: `ProcessorBridge`, `ProcessorBridgeFacade`, `MigrationToggle`.
+- Removed legacy `ConfigurationBridge` and all bridge-related tests; enforced a single strict Schema v1.
+- Updated/added configs: strict normalization fields, `config/defaults/*`, and a fast mini config `sift_baseline_mini.yaml`.
+
+Mini-run snapshot (i_dome + v_wall)
+- SIFT, NoPooling, homography_projection
+- True mAP (micro): 0.5078; True mAP (macro-by-scene): 0.5254
+- Per-scene true mAP: i_dome=0.4089, v_wall=0.6420
+- P@1=0.4613, P@5=0.5531, P@10=0.5905
 
 
 ## 🔍 COMPREHENSIVE CODE REVIEW FINDINGS (2025-08-18)
@@ -229,19 +244,59 @@ After systematic review of all project files, here are the prioritized refactori
 
 ### **📈 MEDIUM PRIORITY IMPROVEMENTS**
 
-#### **4. Configuration System Enhancement**
-- **Add**: Schema validation for YAML files (prevent config errors)
-- **Add**: Default configuration templates in `config/defaults/` (currently empty)
-- **Add**: Parameter range validation and documentation
-- **Add**: Configuration versioning and migration support
-- **Impact**: Low-Medium - improves user experience and robustness
+#### **4. Configuration System (Schema v1) — Back-Compat Removed**
+- Add: Strict schema validation for YAML (no legacy keys).
+- Add: Default configuration templates in `config/defaults/`.
+- Add: Parameter range validation and concise docs.
+- Define: Config `schema_version: 1` optional marker; no migrations provided.
+- Impact: Low-Medium — improves user experience and robustness with a single, clear schema.
+
+Schema v1 (high level):
+- experiment: { name, description, version, author }
+- dataset: { type, path, scenes[] }
+- keypoints: { generator, params: { max_features, contrast_threshold, edge_threshold, sigma, num_octaves, source, keypoint_set_name, locked_keypoints_path } }
+- descriptors: list of { name, type, params: { pooling, scales[], scale_weights[], scale_weighting, scale_weight_sigma, normalize_before_pooling, normalize_after_pooling, norm_type, use_color, secondary_descriptor, stacking_weight } }
+- evaluation: { matching: { method, norm, cross_check, threshold }, validation: { method, threshold, min_matches } }
+- output: { results_path, save_keypoints, save_descriptors, save_matches, save_visualizations }
+- database: { enabled, connection, save_* }
+- migration: removed (no toggle; new pipeline is default)
 
 #### **5. Error Handling Improvement**
-- **Add**: Custom exception types for different error categories
-- **Improve**: Granular error reporting in image processing pipeline
-- **Add**: Input validation in public method interfaces
-- **Add**: Better exception handling in CLI tools
-- **Impact**: Low-Medium - improves robustness and debugging
+- Add: Custom exception types for different error categories
+
+---
+
+## 🚀 Refactor Completion Roadmap (Back-Compat Removed)
+
+1) Make new pipeline default — COMPLETED ✅
+- experiment_runner uses `IDescriptorExtractor` + pooling (Schema v1) end-to-end.
+- Removed `ProcessorBridge`, `ProcessorBridgeFacade`, and `MigrationToggle`.
+
+2) Pooling strategies on new interface — COMPLETED ✅
+- NoPooling, DSP, and Stacking consume `IDescriptorExtractor` end-to-end (Schema v1 overloads).
+- Legacy detector-based overloads retained only where tests depend; safe to drop later.
+
+3) CLI updates — COMPLETED ✅
+- `experiment_runner`: pure new-interface loop (no legacy bridge), DB writes intact.
+- `keypoint_manager`: unchanged; emits data used by new pipeline.
+
+4) Configuration cleanup — COMPLETED ✅
+- Strict Schema v1 in loader; removed legacy keys and migration parsing.
+- Added `config/defaults/*`; updated example configs; added `sift_baseline_mini.yaml`.
+
+5) Test suite updates — COMPLETED ✅
+- Removed bridge/migration tests; kept/expanded YAML schema tests and pooling/factory tests.
+- All tests green (19/19 after cleanup).
+
+6) Prune legacy code — COMPLETED ✅ (phase 1)
+- Removed migration/bridge layer and `ConfigurationBridge`.
+- Remaining legacy modules (descriptor_compare/ and some detector-based code) are still used by tests/CLI; consider staged retirement later if desired.
+
+Deliverables:
+- Clean, understandable pipeline using the new interfaces by default.
+- Single, documented YAML schema (v1) with defaults and design tips.
+- Updated CLI (runner) and tests running on the new pipeline.
+- Improved validation and actionable warnings in YAML loader.
 
 #### **6. Documentation Expansion**
 - **Add**: Comprehensive API documentation (Doxygen integration)

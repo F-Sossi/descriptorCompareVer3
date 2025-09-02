@@ -18,8 +18,7 @@ DescriptorProjectVer3/
 │       │           └── RGBSIFTWrapper.{hpp,cpp}
 │       ├── database/              # Database subsystem (Stage 5)
 │       │   └── DatabaseManager.{hpp,cpp}
-│       └── integration/           # Integration layer (Stage 7)
-│           └── ProcessorBridge.{hpp,cpp}
+│       └── pooling/, matching/, metrics/ # Core pipeline
 │
 ├── 📁 include/                    # Public headers
 │   └── thesis_project/            # Project namespace headers (Stage 2)
@@ -88,7 +87,7 @@ DescriptorProjectVer3/
 ### Standard Build
 ```bash
 cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DBUILD_INTERFACE_MIGRATION=ON
+cmake .. -DUSE_SYSTEM_PACKAGES=ON
 make -j$(nproc)
 ```
 
@@ -116,4 +115,4 @@ make run_analysis
 - **Stage 4**: Configuration system (`config/`)
 - **Stage 5**: Database integration (`src/core/database/`)
 - **Stage 6**: Analysis tools (`analysis/`)
-- **Stage 7**: Interface migration (`src/core/descriptor/`, `src/core/integration/`)
+- Stage 7 migration removed: new pipeline is the default (see README)

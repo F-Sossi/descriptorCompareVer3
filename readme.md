@@ -740,14 +740,15 @@ Current goal state
   │   ├── HoNC.cpp                 # Working implementations
   │   └── ...
   │
-  ├── src/core/                     # 🚧 FUTURE: Modern architecture (Stage 8+)
+  ├── src/core/                     # ✅ ACTIVE: Modern architecture
   │   ├── database/
   │   │   └── DatabaseManager.cpp   # ✅ ACTIVE: Currently used
-  │   ├── descriptor/               # 🚧 DORMANT: Built but unused
-  │   │   ├── DescriptorFactory.cpp # Future migration target
-  │   │   └── extractors/wrappers/  # Future implementations
-  │   └── integration/
-  │       └── ProcessorBridge.cpp   # 🚧 DORMANT: Built but unused
+  │   ├── descriptor/               # ✅ ACTIVE: New extractor wrappers + factory
+  │   │   ├── DescriptorFactory.cpp
+  │   │   └── extractors/wrappers/
+  │   │       ├── SIFTWrapper.cpp
+  │   │       └── RGBSIFTWrapper.cpp
+  │   └── pooling/ + matching/ + metrics/  # Core pipeline components
   │
   ├── database/                     # ✅ ACTIVE: Database system
   │   ├── schema.sql               # Current schema definition
@@ -759,6 +760,121 @@ Current goal state
   └── build/experiments.db         # ✅ ACTIVE: Main database file
 
 ```
+
+## Schema v1 Quick Start
+
+Use the strict Schema v1 for all configs. Start from the templates in `config/defaults/`.
+
+Minimal runnable example
+```yaml
+experiment:
+  name: "minimal_sift"
+  version: "1.0"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+
+keypoints:
+  generator: "sift"
+  max_features: 1000
+  source: "homography_projection"  # or "independent_detection"
+
+descriptors:
+  - name: "sift"
+    type: "sift"
+    pooling: "none"
+    normalize_after_pooling: true
+
+evaluation:
+  matching: { method: brute_force, norm: l2, cross_check: true, threshold: 0.8 }
+  validation: { method: homography, threshold: 0.05, min_matches: 10 }
+
+output: { results_path: "results/", save_visualizations: true }
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
+```
+
+Key fields (Schema v1)
+- experiment: metadata only (name/version/author)
+- dataset: `path` to HPatches root; optional `scenes: []` to subset
+- keypoints: `generator` (sift|harris|orb|locked_in), `max_features`, `source` (homography_projection|independent_detection)
+- descriptors[]: For each descriptor set:
+  - `type`: sift|rgbsift|vsift|honc
+  - `pooling`: none|domain_size_pooling|stacking
+  - Normalization flags: `normalize_before_pooling`, `normalize_after_pooling`
+  - DSP: `scales`, `scale_weights` (matches scales len), or `scale_weighting` (uniform|triangular|gaussian) + `scale_weight_sigma > 0`
+  - Stacking: `secondary_descriptor`, `stacking_weight` in [0,1]
+- evaluation: matching and homography validation settings
+- output/database: I/O and tracking
+
+Validation rules (enforced)
+- dataset.path required; descriptors non-empty
+- Unique `descriptors[].name`
+- `stacking_weight` in [0,1]; `scale_weight_sigma` > 0
+- Stacking requires `secondary_descriptor`
+- DSP `scale_weights` length must equal `scales`; all `scales` > 0
+- Matching threshold in [0,1]; keypoint `sigma > 0`, `num_octaves > 0`, `max_features >= 0`
+
+Templates
+- `config/defaults/minimal.yaml`: minimal SIFT baseline
+- `config/defaults/sift_baseline.yaml`: baseline with explicit thresholds
+- `config/defaults/dsp_gaussian.yaml`: SIFT + DSP with gaussian weighting
+- `config/defaults/stacking_sift_rgbsift.yaml`: SIFT stacked with RGBSIFT
+
+## Experiment Design Tips
+
+- Keypoint source:
+  - `homography_projection`: locked-in evaluation; isolates descriptor quality (recommended for controlled studies).
+  - `independent_detection`: realistic pipeline; includes detector variance (use for end-to-end performance).
+
+- Pooling strategies:
+  - `none`: fastest; good baseline and ablations.
+  - `domain_size_pooling` (DSP): set 3–5 scales around 1.0 (e.g., [0.85, 1.0, 1.3]); prefer `scale_weighting: gaussian` with `scale_weight_sigma ~ 0.15`.
+  - `stacking`: combine complementary descriptors (e.g., sift + rgbsift); ensure `secondary_descriptor` and consider `stacking_weight` when scoring.
+
+- Normalization/rooting:
+  - Prefer `normalize_after_pooling: true` for most setups.
+  - If using RootSIFT-like behavior, apply L1 + sqrt rooting before or after pooling consistently (see pooling_semantics.md) and align with evaluation norm.
+
+- Matching settings:
+  - Use `matching: { method: brute_force, norm: l2, cross_check: true }` for SIFT-family descriptors.
+  - Start with `threshold: 0.8` for baselines; vary per dataset if needed.
+
+- Color vs grayscale:
+  - `use_color: true` for color descriptors (e.g., RGBSIFT); keep false for SIFT/vSIFT.
+
+- Evaluation practice:
+  - Always log both legacy precision and true mAP; use homographies where available to compute per-query AP.
+  - Report per-scene true mAP to reveal variance across scenes.
+
+Where to look
+- See `docs/pooling_semantics.md` for details on weighted pooling and normalization semantics.
+- Use `config/defaults/*` as starting points; copy into `config/experiments/` for your runs.
+
+## Designing Experiment Sets
+
+- Naming conventions:
+  - Place configs in `config/experiments/` with descriptive names (e.g., `sift_baseline.yaml`, `sift_dsp_gaussian.yaml`, `sift_rgbsift_stacking.yaml`).
+  - Set `experiment.name` to a short slug per study (used in DB grouping), and use `descriptors[].name` to distinguish variants.
+
+- Folder structure:
+  - Keep templates in `config/defaults/` for reuse; copy into `config/experiments/` to run.
+  - Results and DB records are stored under `results/` and `build/experiments.db` respectively.
+
+- Scene selection:
+  - Use `dataset.scenes: []` to run all scenes or provide a curated subset (e.g., `["i_ajuntament", "i_dome"]`).
+  - Keep subsets small for iteration; run full-set for final reporting.
+
+- Reproducibility:
+  - For controlled comparisons, prefer `keypoints.source: homography_projection` and pre-generate locked keypoints with `keypoint_manager`.
+  - For end-to-end evaluations, use `independent_detection`; ensure detector parameters are recorded.
+
+- Versioning:
+  - Include `experiment.version` and keep Schema v1 fields only; avoid deprecated keys.
+  - Keep configs self-contained and link associated runs in your analysis notebooks.
 
 ## Troubleshooting
 

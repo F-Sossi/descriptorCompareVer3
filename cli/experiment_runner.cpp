@@ -1,9 +1,11 @@
 #include "src/core/config/YAMLConfigLoader.hpp"
-#include "src/core/config/ConfigurationBridge.hpp"
-#include "descriptor_compare/image_processor.hpp"
-#include "src/core/integration/ProcessorBridgeFacade.hpp"
-#include "src/core/integration/MigrationToggle.hpp"
+#include "descriptor_compare/experiment_config.hpp"
 #include "thesis_project/logging.hpp"
+#include "src/core/descriptor/factories/DescriptorFactory.hpp"
+#include "src/core/pooling/PoolingFactory.hpp"
+#include "src/core/matching/MatchingFactory.hpp"
+#include "src/core/metrics/ExperimentMetrics.hpp"
+#include "src/core/metrics/TrueAveragePrecision.hpp"
 #include "thesis_project/types.hpp"
 #ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
@@ -12,8 +14,163 @@
 #include <filesystem>
 #include <numeric>
 #include <chrono>
+#include <fstream>
 
 using namespace thesis_project;
+
+// Create a simple SIFT detector for independent detection
+static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::ExperimentConfig& cfg) {
+    // Only SIFT supported here for simplicity; extend as needed
+    int maxf = cfg.keypoints.params.max_features;
+    if (maxf > 0) return cv::SIFT::create(maxf);
+    return cv::SIFT::create();
+}
+
+static ::ExperimentMetrics processDirectoryNew(
+    const config::ExperimentConfig& yaml_config,
+    const config::ExperimentConfig::DescriptorConfig& desc_config,
+#ifdef BUILD_DATABASE
+    thesis_project::database::DatabaseManager* db_ptr
+#else
+    void* db_ptr
+#endif
+) {
+    namespace fs = std::filesystem;
+    ::ExperimentMetrics overall;
+    overall.success = true;
+
+    try {
+        if (!fs::exists(yaml_config.dataset.path) || !fs::is_directory(yaml_config.dataset.path)) {
+            return ::ExperimentMetrics::createError("Invalid data folder: " + yaml_config.dataset.path);
+        }
+
+        // Build extractor and pooling strategy for this descriptor (Schema v1)
+        auto extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
+        auto pooling = thesis_project::pooling::PoolingFactory::createFromConfig(desc_config);
+        // Matching: use brute-force L2 with cross-check (current default)
+        auto matcher = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+
+        for (const auto& entry : fs::directory_iterator(yaml_config.dataset.path)) {
+            if (!entry.is_directory()) continue;
+            const std::string scene_folder = entry.path().string();
+            const std::string scene_name = entry.path().filename().string();
+
+            ::ExperimentMetrics metrics;
+
+            // Load image1
+            std::string image1_path = scene_folder + "/1.ppm";
+            cv::Mat image1 = cv::imread(image1_path, cv::IMREAD_COLOR);
+            if (image1.empty()) continue;
+            if (!desc_config.params.use_color && image1.channels() > 1) {
+                cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
+            }
+
+            // Get keypoints for image1
+            std::vector<cv::KeyPoint> keypoints1;
+#ifdef BUILD_DATABASE
+            if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && db_ptr) {
+                auto& db = *db_ptr;
+                keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
+                if (keypoints1.empty()) {
+                    LOG_ERROR("No locked keypoints for " + scene_name + "/1.ppm");
+                    continue;
+                }
+            } else
+#endif
+            {
+                // Detect fresh keypoints
+                auto det = makeDetector(yaml_config);
+                det->detect(image1, keypoints1);
+            }
+
+            // Compute descriptors1 via new interface + pooling
+            cv::Mat descriptors1 = pooling->computeDescriptors(image1, keypoints1, *extractor, desc_config);
+
+            for (int i = 2; i <= 6; ++i) {
+                std::string image_name = std::to_string(i) + ".ppm";
+                std::string image2_path = scene_folder + "/" + image_name;
+                cv::Mat image2 = cv::imread(image2_path, cv::IMREAD_COLOR);
+                if (image2.empty()) continue;
+            if (!desc_config.params.use_color && image2.channels() > 1) {
+                cv::cvtColor(image2, image2, cv::COLOR_BGR2GRAY);
+            }
+
+                // Get keypoints2
+                std::vector<cv::KeyPoint> keypoints2;
+#ifdef BUILD_DATABASE
+                if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && db_ptr) {
+                    auto& db = *db_ptr;
+                    keypoints2 = db.getLockedKeypoints(scene_name, image_name);
+                    if (keypoints2.empty()) {
+                        LOG_ERROR("No locked keypoints for " + scene_name + "/" + image_name);
+                        continue;
+                    }
+                } else
+#endif
+                {
+                    auto det = makeDetector(yaml_config);
+                    det->detect(image2, keypoints2);
+                }
+
+                // Compute descriptors2
+                cv::Mat descriptors2 = pooling->computeDescriptors(image2, keypoints2, *extractor, desc_config);
+                if (descriptors1.empty() || descriptors2.empty()) continue;
+
+                // Match descriptors
+                auto matches = matcher->matchDescriptors(descriptors1, descriptors2);
+
+                // Legacy precision using index equality (if locked)
+                int correctMatches = 0;
+                if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && !matches.empty()) {
+                    for (const auto& m : matches) if (m.queryIdx == m.trainIdx) ++correctMatches;
+                    double precision = matches.empty() ? 0.0 : (double)correctMatches / matches.size();
+                    metrics.addImageResult(scene_name, precision, (int)matches.size(), (int)keypoints2.size());
+                }
+
+                // True mAP via homography if available
+                std::string Hpath = scene_folder + "/H_1_" + std::to_string(i);
+                cv::Mat H = cv::Mat();
+                std::ifstream hfile(Hpath);
+                if (hfile.good()) {
+                    H = cv::Mat::zeros(3,3,CV_64F);
+                    for (int r=0;r<3;++r) for (int c=0;c<3;++c) hfile >> H.at<double>(r,c);
+                    hfile.close();
+                }
+                if (!H.empty() && !keypoints1.empty() && !keypoints2.empty()) {
+                    for (int q = 0; q < (int)keypoints1.size(); ++q) {
+                        cv::Mat qdesc = descriptors1.row(q);
+                        if (qdesc.empty() || cv::norm(qdesc) == 0.0) {
+                            auto dummy = TrueAveragePrecision::QueryAPResult{}; dummy.ap = 0.0; dummy.has_potential_match=false;
+                            metrics.addQueryAP(scene_name, dummy);
+                            continue;
+                        }
+                        std::vector<double> dists; dists.reserve(keypoints2.size());
+                        for (int t = 0; t < (int)keypoints2.size(); ++t) {
+                            cv::Mat tdesc = descriptors2.row(t);
+                            if (tdesc.empty()) { dists.push_back(std::numeric_limits<double>::infinity()); continue; }
+                            double dist = cv::norm(qdesc, tdesc, cv::NORM_L2SQR);
+                            dists.push_back(dist);
+                        }
+                        auto ap = TrueAveragePrecision::computeQueryAP(
+                            keypoints1[q], H, keypoints2, dists, 3.0
+                        );
+                        metrics.addQueryAP(scene_name, ap);
+                    }
+                }
+            }
+
+            // finalize per-scene
+            metrics.calculateMeanPrecision();
+            overall.merge(metrics);
+        }
+
+        overall.calculateMeanPrecision();
+        overall.success = true;
+        return overall;
+    } catch (const std::exception& e) {
+        return ::ExperimentMetrics::createError(e.what());
+    }
+}
 
 /**
  * @brief New experiment runner using YAML configuration
@@ -53,40 +210,16 @@ int main(int argc, char** argv) {
         // Results directory creation removed - using database storage only
         std::string results_base = yaml_config.output.results_path + yaml_config.experiment.name;
 
-        // Set migration toggle globally for optional Stage 7 routing
-        thesis_project::integration::MigrationToggle::setEnabled(yaml_config.migration.use_new_interface);
-
         // Run experiment for each descriptor configuration
         for (size_t i = 0; i < yaml_config.descriptors.size(); ++i) {
             const auto& desc_config = yaml_config.descriptors[i];
 
             LOG_INFO("Running experiment with descriptor: " + desc_config.name);
 
-            // Convert to old configuration format for existing image processor
-            auto old_config = config::ConfigurationBridge::createOldConfigForDescriptor(yaml_config, i);
-            
-            // Refresh detectors after configuration bridge updates
-            old_config.refreshDetectors();
-
             // Descriptor-specific directory creation removed - using database storage only
             std::string results_path = results_base + "/" + desc_config.name;
 
-            // Optional Stage 7 migration smoke test (does not alter main pipeline)
-            if (yaml_config.migration.use_new_interface) {
-                try {
-                    bool supported = thesis_project::integration::isNewInterfaceSupported(old_config);
-                    if (supported) {
-                        LOG_INFO("[Migration] New interface supported for descriptor: " + desc_config.name);
-                        cv::Mat test_image = cv::Mat::zeros(100, 100, CV_8UC3);
-                        auto result = thesis_project::integration::smokeDetectAndCompute(test_image, old_config);
-                        LOG_INFO("[Migration] Smoke test: " + std::to_string(result.first.size()) + " keypoints, " + std::to_string(result.second.rows) + " descriptors");
-                    } else {
-                        LOG_INFO("[Migration] New interface not supported for descriptor: " + desc_config.name + ", using legacy path.");
-                    }
-                } catch (const std::exception& e) {
-                    LOG_INFO(std::string("[Migration] New interface smoke test failed: ") + e.what());
-                }
-            }
+            // New interface is the default path where supported; processor_utils handles routing.
 
 #ifdef BUILD_DATABASE
             // Record experiment configuration
@@ -105,11 +238,13 @@ int main(int argc, char** argv) {
             int experiment_id = db.recordConfiguration(dbConfig);
 #endif
 
-            // Run existing image processing pipeline
-            auto experiment_metrics = image_processor::process_directory(
-                yaml_config.dataset.path,
-                results_path,
-                old_config
+            // Run new pipeline path end-to-end
+            auto experiment_metrics = processDirectoryNew(yaml_config, desc_config,
+#ifdef BUILD_DATABASE
+                &db
+#else
+                nullptr
+#endif
             );
             
 #ifdef BUILD_DATABASE
@@ -187,8 +322,6 @@ int main(int argc, char** argv) {
         LOG_INFO("🎉 Experiment completed: " + yaml_config.experiment.name);
         LOG_INFO("📊 Experiment results saved to database");
 
-        // Reset migration toggle to avoid leaking state
-        thesis_project::integration::MigrationToggle::setEnabled(false);
         return 0;
 
     } catch (const std::exception& e) {

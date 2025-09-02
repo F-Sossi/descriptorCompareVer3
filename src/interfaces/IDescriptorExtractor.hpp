@@ -5,15 +5,11 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include "thesis_project/types.hpp"
 
 namespace thesis_project {
 
-    // Forward declarations
-    struct DescriptorParams {
-        // Add descriptor-specific parameters here
-        int param1 = 0;
-        double param2 = 1.0;
-    };
+    // Use DescriptorParams from types.hpp
 
     /**
      * @brief Interface for descriptor extraction algorithms
