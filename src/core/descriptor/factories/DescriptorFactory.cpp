@@ -5,6 +5,7 @@
 #include "../extractors/wrappers/VSIFTWrapper.hpp"
 #include "../extractors/wrappers/DSPSIFTWrapper.hpp"
 #include "../extractors/wrappers/DNNPatchWrapper.hpp"
+#include "../extractors/wrappers/PseudoDNNWrapper.hpp"
 #include "../extractors/wrappers/VGGWrapper.hpp"
 #include <stdexcept>
 

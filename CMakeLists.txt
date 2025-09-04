@@ -566,6 +566,7 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
         # DNN wrapper
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DNNPatchWrapper.cpp)
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp)
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
         

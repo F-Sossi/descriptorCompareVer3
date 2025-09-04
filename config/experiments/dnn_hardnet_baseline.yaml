@@ -1,0 +1,51 @@
+experiment:
+  name: "lightweight_cnn_baseline_mini_independent" 
+  description: "Lightweight CNN patch descriptor baseline (no pooling), independent detection"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: ["i_dome", "v_wall"]
+
+keypoints:
+  generator: "sift"
+  max_features: 1500
+  source: "independent_detection"
+
+descriptors:
+  - name: "lightweight_cnn"
+    type: "dnn_patch"
+    pooling: "none"
+    use_color: false
+    dnn:
+      model: "../models/simple_hardnet_opset13.onnx"  # Working simplified HardNet
+      input_size: 32                         # Patch size N x N (grayscale)
+      support_multiplier: 1.0                # Patch side = mult * keypoint.size
+      rotate_to_upright: true                # Align using kp.angle for fairness
+      mean: 0.0                              # Typical: input scaled to [0,1]
+      std: 1.0                               # Adjust if model docs specify
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
+

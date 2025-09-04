@@ -202,6 +202,7 @@ namespace config {
                 if (dnn["rotate_to_upright"]) desc_config.params.dnn_rotate_upright = dnn["rotate_to_upright"].as<bool>();
                 if (dnn["mean"]) desc_config.params.dnn_mean = dnn["mean"].as<float>();
                 if (dnn["std"]) desc_config.params.dnn_std = dnn["std"].as<float>();
+                if (dnn["per_patch_standardize"]) desc_config.params.dnn_per_patch_standardize = dnn["per_patch_standardize"].as<bool>();
             }
             
             descriptors.push_back(desc_config);

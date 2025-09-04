@@ -304,6 +304,7 @@ namespace thesis_project {
         bool dnn_rotate_upright = true;      // rotate patch to keypoint orientation
         float dnn_mean = 0.0f;        // simple mean/std normalization
         float dnn_std = 1.0f;
+        bool dnn_per_patch_standardize = false; // if true, standardize each patch (zero mean, unit var)
     };
 
     struct EvaluationParams {

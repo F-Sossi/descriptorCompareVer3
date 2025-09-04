@@ -17,9 +17,10 @@ Recent validation (mini run):
 - VGG on scenes [i_dome, v_wall], independent detection: P@1≈0.503, true_map_micro≈0.535; results saved to DB.
 
 Next steps (short list):
-- Compare SIFT vs VGG on the same scenes; add VGG parameter sweeps (desc size/orientation/image normalize).
-- Prepare a small run matrix (NONE vs DSP vs STACKING vs VGG) on a subset.
-- DNN patch: integrate a sample ONNX model and add a verified config.
+- Add DNN baselines (HardNet, SOSNet) via ONNX using `DNNPatchWrapper`; ensure fairness (same keypoints, support window, grayscale, no pooling).
+- Compare SIFT vs VGG; add VGG parameter sweeps (desc size/orientation/image normalize).
+- Prepare a small run matrix (NONE vs DSP vs STACKING vs VGG vs DNN) on a subset.
+- Document ONNX usage and export tips; include example configs.
 
 ---
 

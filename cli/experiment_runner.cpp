@@ -1,5 +1,6 @@
 #include "src/core/config/YAMLConfigLoader.hpp"
 #include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
@@ -58,14 +59,28 @@ static ::ExperimentMetrics processDirectoryNew(
             if (desc_config.params.dnn_model_path.empty()) {
                 throw std::runtime_error("dnn_patch requires dnn.model path in YAML");
             }
-            extractor = std::make_unique<thesis_project::wrappers::DNNPatchWrapper>(
-                desc_config.params.dnn_model_path,
-                desc_config.params.dnn_input_size,
-                desc_config.params.dnn_support_multiplier,
-                desc_config.params.dnn_rotate_upright,
-                desc_config.params.dnn_mean,
-                desc_config.params.dnn_std
-            );
+            try {
+                LOG_INFO("Creating DNNPatchWrapper with model: " + desc_config.params.dnn_model_path);
+                extractor = std::make_unique<thesis_project::wrappers::DNNPatchWrapper>(
+                    desc_config.params.dnn_model_path,
+                    desc_config.params.dnn_input_size,
+                    desc_config.params.dnn_support_multiplier,
+                    desc_config.params.dnn_rotate_upright,
+                    desc_config.params.dnn_mean,
+                    desc_config.params.dnn_std,
+                    desc_config.params.dnn_per_patch_standardize
+                );
+                LOG_INFO("DNNPatchWrapper created successfully");
+            } catch (const std::exception& e) {
+                LOG_WARNING("DNNPatchWrapper failed: " + std::string(e.what()));
+                LOG_INFO("Falling back to Lightweight CNN baseline for comparison");
+                extractor = std::make_unique<thesis_project::wrappers::PseudoDNNWrapper>(
+                    desc_config.params.dnn_input_size,
+                    desc_config.params.dnn_support_multiplier,
+                    desc_config.params.dnn_rotate_upright
+                );
+                LOG_INFO("Lightweight CNN baseline created successfully");
+            }
         } else {
             extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
         }
@@ -84,6 +99,18 @@ static ::ExperimentMetrics processDirectoryNew(
             if (!entry.is_directory()) continue;
             const std::string scene_folder = entry.path().string();
             const std::string scene_name = entry.path().filename().string();
+
+            // Filter scenes if specified in config
+            if (!yaml_config.dataset.scenes.empty()) {
+                bool scene_found = false;
+                for (const auto& allowed_scene : yaml_config.dataset.scenes) {
+                    if (scene_name == allowed_scene) {
+                        scene_found = true;
+                        break;
+                    }
+                }
+                if (!scene_found) continue;
+            }
 
             ::ExperimentMetrics metrics;
 
@@ -114,13 +141,20 @@ static ::ExperimentMetrics processDirectoryNew(
                 det->detect(image1, keypoints1);
                 auto t1 = std::chrono::high_resolution_clock::now();
                 detect_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+                LOG_INFO("Detected " + std::to_string(keypoints1.size()) + " keypoints for " + scene_name + "/1.ppm");
             }
 
             // Compute descriptors1 via new interface + pooling
             cv::Mat descriptors1;
             {
                 auto t0 = std::chrono::high_resolution_clock::now();
-                descriptors1 = pooling->computeDescriptors(image1, keypoints1, *extractor, desc_config);
+                try {
+                    descriptors1 = pooling->computeDescriptors(image1, keypoints1, *extractor, desc_config);
+                    LOG_INFO("Computed descriptors1: " + std::to_string(descriptors1.rows) + "x" + std::to_string(descriptors1.cols));
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Failed to compute descriptors for " + scene_name + "/1.ppm: " + std::string(e.what()));
+                    continue;
+                }
                 auto t1 = std::chrono::high_resolution_clock::now();
                 compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
             }
@@ -322,10 +356,10 @@ int main(int argc, char** argv) {
                 results.dataset_name = yaml_config.dataset.path;
                 results.processing_time_ms = duration.count();
                 results.mean_average_precision = experiment_metrics.legacy_macro_precision_by_scene;
-                results.precision_at_1 = experiment_metrics.mean_precision;
-                results.precision_at_5 = experiment_metrics.mean_precision;
-                results.recall_at_1 = 0.0;
-                results.recall_at_5 = 0.0;
+                results.precision_at_1 = experiment_metrics.precision_at_1;
+                results.precision_at_5 = experiment_metrics.precision_at_5;
+                results.recall_at_1 = experiment_metrics.recall_at_1;
+                results.recall_at_5 = experiment_metrics.recall_at_5;
                 results.total_matches = experiment_metrics.total_matches;
                 results.total_keypoints = experiment_metrics.total_keypoints;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";

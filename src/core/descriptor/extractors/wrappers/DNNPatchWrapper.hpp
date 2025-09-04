@@ -15,6 +15,7 @@ private:
     bool rotate_upright_ = true;
     float mean_ = 0.0f;
     float std_ = 1.0f;
+    bool per_patch_standardize_ = false;
 
 public:
     explicit DNNPatchWrapper(const std::string& onnx_model_path,
@@ -22,7 +23,8 @@ public:
                              float support_multiplier,
                              bool rotate_to_upright,
                              float mean,
-                             float std);
+                             float std,
+                             bool per_patch_standardize);
 
     cv::Mat extract(const cv::Mat& image,
                     const std::vector<cv::KeyPoint>& keypoints,
@@ -35,4 +37,3 @@ public:
 
 } // namespace wrappers
 } // namespace thesis_project
-
