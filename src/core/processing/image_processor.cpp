@@ -5,9 +5,9 @@
 #include <string>
 #include <chrono>
 
-#include "experiment_config.hpp"
+#include "../config/experiment_config.hpp"
 #include "image_processor.hpp"
-#include "locked_in_keypoints.hpp"
+#include "../keypoints/locked_in_keypoints.hpp"
 #ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
 #endif

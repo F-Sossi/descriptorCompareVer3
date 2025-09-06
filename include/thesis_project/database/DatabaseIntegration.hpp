@@ -2,7 +2,7 @@
 #define THESIS_PROJECT_DATABASE_INTEGRATION_HPP
 
 #include "thesis_project/database/DatabaseManager.hpp"
-#include "../../../descriptor_compare/experiment_config.hpp"
+#include "../../../src/core/config/experiment_config.hpp"
 
 namespace thesis_project {
 namespace database {

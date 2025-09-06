@@ -50,6 +50,8 @@ Desktop.ini
 
 # Log files
 *.log
+AGENTS.md
+CLAUDE.md
 
 # Core dumps
 core.*

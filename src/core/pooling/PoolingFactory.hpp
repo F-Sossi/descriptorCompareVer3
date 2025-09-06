@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PoolingStrategy.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include <memory>
 
 namespace thesis_project::pooling {

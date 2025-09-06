@@ -11,7 +11,7 @@
 #include <map>
 
 
-#include "experiment_config.hpp"
+#include "../config/experiment_config.hpp"
 #include "processor_utils.hpp"
 #include "src/core/metrics/ExperimentMetrics.hpp"
 #include "src/core/visualization/VisualVerification.hpp"

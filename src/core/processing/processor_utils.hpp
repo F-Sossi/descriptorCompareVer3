@@ -8,7 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <random>
-#include "experiment_config.hpp"
+#include "../config/experiment_config.hpp"
 
 class processor_utils {
 

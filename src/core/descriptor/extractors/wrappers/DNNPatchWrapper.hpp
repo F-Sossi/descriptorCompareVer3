@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include "interfaces/IDescriptorExtractor.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include <opencv2/dnn.hpp>
 
 namespace thesis_project {
@@ -78,7 +78,7 @@ private:
 #pragma once
 
 #include "interfaces/IDescriptorExtractor.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include <opencv2/dnn.hpp>
 
 namespace thesis_project {

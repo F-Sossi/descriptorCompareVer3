@@ -3,7 +3,7 @@
 
 #include "src/core/matching/MatchingFactory.hpp"
 #include "src/core/matching/MatchingStrategy.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 
 using thesis_project::matching::MatchingFactory;
 

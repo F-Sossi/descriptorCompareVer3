@@ -2,7 +2,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "src/core/pooling/PoolingFactory.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 
 using thesis_project::pooling::PoolingFactory;
 

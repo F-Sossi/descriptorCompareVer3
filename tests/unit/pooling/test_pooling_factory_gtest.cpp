@@ -4,7 +4,7 @@
 #include "src/core/pooling/NoPooling.hpp"
 #include "src/core/pooling/DomainSizePooling.hpp"
 #include "src/core/pooling/StackingPooling.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include <memory>
 #include <opencv2/opencv.hpp>
 

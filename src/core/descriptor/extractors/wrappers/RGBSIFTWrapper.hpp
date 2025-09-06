@@ -2,7 +2,7 @@
 
 #include "interfaces/IDescriptorExtractor.hpp"
 #include "keypoints/RGBSIFT.h"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 
 namespace thesis_project {
 namespace wrappers {

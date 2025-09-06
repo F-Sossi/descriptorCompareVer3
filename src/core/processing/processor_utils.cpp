@@ -1,6 +1,6 @@
 #include "processor_utils.hpp"
-#include "experiment_config.hpp"
-#include "../keypoints/VanillaSIFT.h"
+#include "../config/experiment_config.hpp"
+#include "keypoints/VanillaSIFT.h"
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"

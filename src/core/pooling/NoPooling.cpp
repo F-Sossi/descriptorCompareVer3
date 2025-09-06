@@ -1,5 +1,5 @@
 #include "NoPooling.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include "keypoints/VanillaSIFT.h"
 #include "src/interfaces/IDescriptorExtractor.hpp"
 

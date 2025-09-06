@@ -3,7 +3,7 @@
 
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/pooling/PoolingStrategy.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 
 using thesis_project::pooling::PoolingFactory;
 

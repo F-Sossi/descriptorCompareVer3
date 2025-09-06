@@ -314,8 +314,8 @@ function(create_gtest_if_exists test_source test_name)
                     src/core/pooling/StackingPooling.cpp
                     src/core/matching/BruteForceMatching.cpp
                     src/core/matching/MatchingFactory.cpp
-                    descriptor_compare/experiment_config.cpp
-                    descriptor_compare/processor_utils.cpp
+                    src/core/config/experiment_config.cpp
+                    src/core/processing/processor_utils.cpp
                 )
             endif()
         elseif(${test_name} MATCHES "metrics|true_average_precision")
@@ -328,7 +328,7 @@ function(create_gtest_if_exists test_source test_name)
             target_sources(${test_name} PRIVATE 
                 src/core/matching/BruteForceMatching.cpp
                 src/core/matching/MatchingFactory.cpp
-                descriptor_compare/experiment_config.cpp
+                src/core/config/experiment_config.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src descriptor_compare keypoints)
@@ -339,7 +339,7 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/pooling/NoPooling.cpp
                 src/core/pooling/DomainSizePooling.cpp
                 src/core/pooling/StackingPooling.cpp
-                descriptor_compare/experiment_config.cpp
+                src/core/config/experiment_config.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
@@ -407,7 +407,7 @@ create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "t
 create_gtest_if_exists("tests/unit/factories/test_descriptor_factory_gtest.cpp" "test_descriptor_factory_gtest")
 if(TARGET test_descriptor_factory_gtest)
     target_sources(test_descriptor_factory_gtest PRIVATE 
-        descriptor_compare/experiment_config.cpp
+        src/core/config/experiment_config.cpp
         src/core/descriptor/factories/DescriptorFactory.cpp
         src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
         src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
@@ -465,7 +465,7 @@ add_custom_target(run_gtest_tests
 )
 
 # Install rules - descriptor_compare removed, use experiment_runner instead
-install(DIRECTORY config/ DESTINATION share/descriptor_compare/config
+install(DIRECTORY config/ DESTINATION share/thesis_project/config
         FILES_MATCHING PATTERN "*.yaml" PATTERN "*.yml")
 
 # Print configuration summary
@@ -645,8 +645,8 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
         add_executable(keypoint_manager
                        cli/keypoint_manager.cpp
-                       descriptor_compare/locked_in_keypoints.cpp
-                       descriptor_compare/processor_utils.cpp
+                       src/core/keypoints/locked_in_keypoints.cpp
+                       src/core/processing/processor_utils.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp
                        src/core/pooling/StackingPooling.cpp
@@ -754,7 +754,7 @@ create_gtest_if_exists("tests/unit/config/test_configuration_bridge_roundtrip_gt
 if(TARGET test_configuration_bridge_roundtrip_gtest)
     target_sources(test_configuration_bridge_roundtrip_gtest PRIVATE 
         src/core/config/ConfigurationBridge.cpp
-        descriptor_compare/experiment_config.cpp
+        src/core/config/experiment_config.cpp
     )
     target_link_libraries(test_configuration_bridge_roundtrip_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_configuration_bridge_roundtrip_gtest PRIVATE src include keypoints ${OpenCV_INCLUDE_DIRS})

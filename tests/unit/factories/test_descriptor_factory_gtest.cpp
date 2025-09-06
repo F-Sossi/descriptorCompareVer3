@@ -2,7 +2,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 
 namespace tf = thesis_project::factories;
 

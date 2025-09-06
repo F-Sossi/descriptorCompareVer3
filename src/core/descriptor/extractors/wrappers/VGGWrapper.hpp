@@ -1,7 +1,7 @@
 #pragma once
 
 #include "src/interfaces/IDescriptorExtractor.hpp"
-#include "descriptor_compare/experiment_config.hpp"
+#include "src/core/config/experiment_config.hpp"
 #include <memory>
 
 // Guard include of xfeatures2d for portability
