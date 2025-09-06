@@ -1,6 +1,6 @@
 experiment:
-  name: "sift_baseline_mini"
-  description: "Quick smoke run on a few scenes"
+  name: "dnn_hardnet_baseline_m5_independent"
+  description: "HardNet with support_multiplier=5.0 (upright), independent detection"
   version: "1.0"
   author: "researcher"
 
@@ -12,13 +12,21 @@ dataset:
 keypoints:
   generator: "sift"
   max_features: 1500
-  source: "homography_projection"
+  source: "independent_detection"
 
 descriptors:
-  - name: "sift"
-    type: "sift"
+  - name: "hardnet_m5"
+    type: "dnn_patch"
     pooling: "none"
-    normalize_after_pooling: true
+    use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 5.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: true
 
 evaluation:
   matching:
@@ -41,3 +49,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

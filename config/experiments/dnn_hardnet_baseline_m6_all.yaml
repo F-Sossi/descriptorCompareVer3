@@ -1,6 +1,6 @@
 experiment:
-  name: "rgbsift_test"
-  description: "Test RGBSIFT descriptor by itself"
+  name: "dnn_hardnet_baseline_m6_all"
+  description: "HardNet m=6.0, per-patch std, all scenes"
   version: "1.0"
   author: "researcher"
 
@@ -12,17 +12,21 @@ dataset:
 keypoints:
   generator: "sift"
   max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
+  source: "independent_detection"
 
 descriptors:
-  - name: "rgbsift_only"
-    type: "rgbsift"
+  - name: "hardnet_m6"
+    type: "dnn_patch"
     pooling: "none"
-    normalize_before_pooling: false
-    normalize_after_pooling: true
-    norm_type: 4  # L2
-    use_color: true  # RGBSIFT uses color
+    use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 6.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: true
 
 evaluation:
   matching:
@@ -30,7 +34,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -46,3 +49,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

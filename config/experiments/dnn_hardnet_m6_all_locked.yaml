@@ -1,6 +1,6 @@
 experiment:
-  name: "sift_stacking_test"
-  description: "Test SIFT with Stacking after fix"
+  name: "dnn_hardnet_m6_all_locked"
+  description: "HardNet m=6.0 with homography-projected (locked) keypoints across all scenes"
   version: "1.0"
   author: "researcher"
 
@@ -12,17 +12,21 @@ dataset:
 keypoints:
   generator: "sift"
   max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
+  source: "homography_projection"
 
 descriptors:
-  - name: "sift_stacking"
-    type: "sift"
-    pooling: "stacking"
-    normalize_before_pooling: false
-    normalize_after_pooling: true
-    norm_type: 4  # L2
+  - name: "hardnet_m6_locked"
+    type: "dnn_patch"
+    pooling: "none"
     use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 6.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: true
 
 evaluation:
   matching:
@@ -30,7 +34,6 @@ evaluation:
     norm: "l2"
     cross_check: true
     threshold: 0.8
-
   validation:
     method: "homography"
     threshold: 0.05
@@ -46,3 +49,4 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+

@@ -289,9 +289,27 @@ int main(int argc, char** argv) {
         auto yaml_config = config::YAMLConfigLoader::loadFromFile(config_path);
 
 #ifdef BUILD_DATABASE
-        // Initialize database for experiment tracking
-        thesis_project::database::DatabaseManager db("experiments.db", true);
+        // Initialize database for experiment tracking (respect YAML when provided)
+        auto normalizeDbPath = [](std::string s) {
+            const std::string prefix = "sqlite:///";
+            if (s.rfind(prefix, 0) == 0) {
+                return s.substr(prefix.size());
+            }
+            return s;
+        };
+
+        bool db_enabled = true;
+        std::string db_path = "experiments.db"; // default in current working dir (build/)
+        if (!yaml_config.database.connection_string.empty()) {
+            db_path = normalizeDbPath(yaml_config.database.connection_string);
+        }
+        if (!yaml_config.database.connection_string.empty() || yaml_config.database.enabled) {
+            db_enabled = true;
+        }
+
+        thesis_project::database::DatabaseManager db(db_path, db_enabled);
         if (db.isEnabled()) {
+            db.optimizeForBulkOperations();
             LOG_INFO("Database tracking enabled");
         } else {
             LOG_INFO("Database tracking disabled");
@@ -355,7 +373,10 @@ int main(int argc, char** argv) {
                 results.descriptor_type = desc_config.name;
                 results.dataset_name = yaml_config.dataset.path;
                 results.processing_time_ms = duration.count();
-                results.mean_average_precision = experiment_metrics.legacy_macro_precision_by_scene;
+                // Use true IR-style mAP instead of broken legacy metric
+                results.mean_average_precision = experiment_metrics.true_map_macro_by_scene > 0.0 ? 
+                                                experiment_metrics.true_map_macro_by_scene :
+                                                experiment_metrics.true_map_micro;
                 results.precision_at_1 = experiment_metrics.precision_at_1;
                 results.precision_at_5 = experiment_metrics.precision_at_5;
                 results.recall_at_1 = experiment_metrics.recall_at_1;

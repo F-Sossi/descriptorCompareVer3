@@ -1,6 +1,6 @@
 experiment:
-  name: "sift_baseline_mini_independent"
-  description: "Quick smoke run with independent detection"
+  name: "dnn_hardnet_m6_global_01_independent"
+  description: "HardNet m=6.0, global norm mean=0.0 std=1.0"
   version: "1.0"
   author: "researcher"
 
@@ -15,10 +15,18 @@ keypoints:
   source: "independent_detection"
 
 descriptors:
-  - name: "sift"
-    type: "sift"
+  - name: "hardnet_m6_global01"
+    type: "dnn_patch"
     pooling: "none"
-    normalize_after_pooling: true
+    use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 6.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: false
 
 evaluation:
   matching:

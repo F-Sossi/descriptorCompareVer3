@@ -4,6 +4,9 @@
 #include <sstream>
 #include <chrono>
 #include <iomanip>
+#include <vector>
+#include <tuple>
+#include <map>
 
 namespace thesis_project::database {
 
@@ -959,4 +962,3 @@ std::vector<std::tuple<int, std::string, std::string>> DatabaseManager::getAvail
 }
 
 } // namespace thesis_project::database
-

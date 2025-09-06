@@ -1,6 +1,6 @@
 experiment:
-  name: "dnn_sosnet_baseline_mini_independent"
-  description: "SOSNet patch descriptor (no pooling), independent detection"
+  name: "dnn_hardnet_m6_global_05_independent"
+  description: "HardNet m=6.0, global norm mean=0.5 std=0.5"
   version: "1.0"
   author: "researcher"
 
@@ -15,17 +15,18 @@ keypoints:
   source: "independent_detection"
 
 descriptors:
-  - name: "sosnet"
+  - name: "hardnet_m6_global05"
     type: "dnn_patch"
     pooling: "none"
     use_color: false
     dnn:
-      model: "../models/tiny_cnn.onnx"         # Provide ONNX file path (will fallback to PseudoDNN)
-      input_size: 32                         # Patch size N x N (grayscale)
-      support_multiplier: 1.0                # Patch side = mult * keypoint.size
-      rotate_to_upright: true                # Align using kp.angle for fairness
-      mean: 0.0                              # Typical: input scaled to [0,1]
-      std: 1.0                               # Adjust if model docs specify
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 6.0
+      rotate_to_upright: true
+      mean: 0.5
+      std: 0.5
+      per_patch_standardize: false
 
 evaluation:
   matching:

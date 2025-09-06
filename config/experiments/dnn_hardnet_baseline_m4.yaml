@@ -1,6 +1,6 @@
 experiment:
-  name: "lightweight_cnn_baseline_mini_independent" 
-  description: "Lightweight CNN patch descriptor baseline (no pooling), independent detection"
+  name: "dnn_hardnet_baseline_m4_independent"
+  description: "HardNet with support_multiplier=4.0 (upright), independent detection"
   version: "1.0"
   author: "researcher"
 
@@ -15,17 +15,18 @@ keypoints:
   source: "independent_detection"
 
 descriptors:
-  - name: "lightweight_cnn"
+  - name: "hardnet_m4"
     type: "dnn_patch"
     pooling: "none"
     use_color: false
     dnn:
-      model: "../models/simple_hardnet_opset13.onnx"  # Working simplified HardNet
-      input_size: 32                         # Patch size N x N (grayscale)
-      support_multiplier: 1.0                # Patch side = mult * keypoint.size
-      rotate_to_upright: true                # Align using kp.angle for fairness
-      mean: 0.0                              # Typical: input scaled to [0,1]
-      std: 1.0                               # Adjust if model docs specify
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 4.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: true
 
 evaluation:
   matching:

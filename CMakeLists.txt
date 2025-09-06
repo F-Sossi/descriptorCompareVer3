@@ -346,6 +346,7 @@ function(create_gtest_if_exists test_source test_name)
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
@@ -412,7 +413,8 @@ if(TARGET test_descriptor_factory_gtest)
         src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
         src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
         src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
-        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
     target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
@@ -657,6 +659,9 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
+
+        # VGG wrapper (requires OpenCV contrib xfeatures2d)
+        target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         

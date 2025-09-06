@@ -7,12 +7,12 @@ experiment:
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: ["i_dome", "v_wall"]
+  scenes: [ ]
 
 keypoints:
   generator: "sift"
   max_features: 1500
-  source: "homography_projection"    # Use same locked keypoints as DNN
+  source: "independent_detection"   # Use same locked keypoints as DNN
 
 descriptors:
   - name: "sift"

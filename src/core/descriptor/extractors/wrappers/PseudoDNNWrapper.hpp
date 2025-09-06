@@ -36,7 +36,7 @@ public:
 
     cv::Mat extract(const cv::Mat& image,
                     const std::vector<cv::KeyPoint>& keypoints,
-                    const DescriptorParams& params = {}) override;
+                    const thesis_project::DescriptorParams& params = {}) override;
 
     std::string name() const override { return "LightweightCNN"; }
     int descriptorSize() const override { return 128; }
